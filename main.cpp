@@ -15,6 +15,7 @@ using std::unordered_map;
 //=================================================================================================
 // timekeeping
 #include <chrono>
+using namespace std::chrono_literals;
 //=================================================================================================
 // mutex / lock stuff
 #include <mutex>
@@ -33,6 +34,7 @@ using std::unique_ptr;
 // specific width types + atomics, for "program counter"
 #include <cstdint>
 #include <atomic>
+using std::uintmax_t;
 using std::atomic_uintmax_t;
 //=================================================================================================
 // Terminal UI output
@@ -42,6 +44,9 @@ using std::atomic_uintmax_t;
 using namespace ftxui;
 //=================================================================================================
 // math/vector stuff
+#define GLM_FORCE_SWIZZLE
+#include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include <glm/vec3.hpp> 					// glm::vec3
 #include <glm/vec4.hpp> 					// glm::vec4
 #include <glm/mat4x4.hpp> 					// glm::mat4
@@ -150,9 +155,6 @@ private:
 };
 //=================================================================================================
 //=================================================================================================
-// the list of particles which have been anchored
-unordered_map< ivec3, vector< unique_ptr< mat4 > > > anchoredParticles;
-mutex anchoredParticlesGuard;
 
 // going to use this as a threshold for a kind of "bonding affinity"... may need more detail here than 1 degree of freedom
 // float transformSimilarity ( const particle_t &a, const particle_t &b ) const {
@@ -164,69 +166,195 @@ mutex anchoredParticlesGuard;
     // return tan( dot( tA, tB ) * pi * 2.0f );
 // }
 
-vector< vec3 > particlePool;
+struct gridCell {
+    // keeping "count" as an atomic, separate from .size()...
+        // this means we can make sure that the mat4 is fully constructed before showing as available to other threads
+    std::atomic< std::int32_t > count;
+    std::vector< unique_ptr< const mat4 > > particles;
+};
+
+// the list of particles which have been anchored
+unordered_map< ivec3, gridCell > anchoredParticles;
+mutex anchoredParticlesGuard;
+
+// maintaining stats on the above container
 ivec3 minExtents = ivec3( 0 );
 ivec3 maxExtents = ivec3( 0 );
+int numAnchored = 0;
 
-void anchorParticle ( vec3 p ) {
-    // we need to anchor this particle... but first, lock the mutex so only one thread can do this at once
-    lock_guard< mutex > lock( anchoredParticlesGuard ); // mutex entering scope locks 
+// the particles are the diffusion-limit mechanism
+vector< vec4 > particlePool;
 
-    // precompute integer version
-    const ivec3 iP = ivec3( p );
+// get a point on the boundary
+void respawnParticle ( vec4 p ) {
+    rngi pick( 0, 2 );
+    rng pick2( 0.0f, 1.0f );
 
-    // we need to update our bounds with the new particle location
-    minExtents = glm::min( iP, minExtents );
-    maxExtents = glm::max( iP, maxExtents );
+    bool face = ( pick2() < 0.5f );
+    p.x = glm::mix( minExtents.x - 10, maxExtents.z + 10, pick2() );
+    p.y = glm::mix( minExtents.y - 10, maxExtents.y + 10, pick2() );
+    p.z = glm::mix( minExtents.z - 10, maxExtents.z + 10, pick2() );
 
-    // and add the particle... right now we will use only position, but orientation is important for crystal lattice
-    mat4 pTransform = glm::translate( mat4( 1.0f ), p );
-    anchoredParticles[ iP ].push_back( make_unique< mat4 >( pTransform ) );
+    switch ( pick() ) {
+        // we will be on one of the parallel x faces, flatten
+        case 0:
+            p.x = face ? minExtents.x - 10 : maxExtents.x + 10;
+            break;
+
+        // ditto, y faces
+        case 1:
+            p.y = face ? minExtents.y - 10 : maxExtents.y + 10;
+            break;
+
+        // z faces
+        case 2:
+            p.z = face ? minExtents.z - 10 : maxExtents.z + 10;
+            break;
+
+        // shouldn't hit, but will be uniform random spawn if you do
+        default:
+            break;
+    }
+
+    // the .w will be a counter... it is decremented any update during which it is outide the current bounding volume
+    p.w = 100.0f; // I think this is a nice mechanism - it can wander, but in a bounded way - when it hits zero, respawn
 }
 
-void reporterThreadFunction () {
-    
+void anchorParticle ( vec3 p, const mat4 pTransform ) {
+    // we need to anchor this particle... but first, lock the mutex so only one thread can do this at once
+    lock_guard< mutex > lock( anchoredParticlesGuard ); // mutex object entering scope locks... declaration is blocking 
+
+    // precompute integer rounded coordinates
+    const ivec3 iP = ivec3( p );
+
+    // push the constructed mat4 onto the list
+    anchoredParticles[ iP ].particles.push_back( make_unique< const mat4 >( pTransform ) );
+
+    // now that it's safe to access, show it as available for other threads
+    anchoredParticles[ iP ].count++; // "++" operator does the atomic increment
+
+    // tracking how many particles have been added, and the min and max extents
+    minExtents = glm::min( iP, minExtents );
+    maxExtents = glm::max( iP, maxExtents );
+    numAnchored++;
+
+    // and the mutex leaves scope, unblocking for the next write access
+}
+
+// this is the update, operating on a particular particle
+void particleUpdate ( uintmax_t jobIndex, rng &jitter ) {
+    uintmax_t idx = jobIndex % particlePool.size();
+
+    // oob decrement + respawn logic
+    if ( glm::any( glm::lessThanEqual( particlePool[ idx ].xyz(), vec3( minExtents - ivec3( 10 ) ) ) ) ||
+        glm::any( glm::greaterThanEqual( particlePool[ idx ].xyz(), vec3( maxExtents + ivec3( 10 ) ) ) ) ) {
+        // idea is that when you stray outside of the bounding volume, you suffer some attrition...
+        particlePool[ idx ].w--;
+        if ( particlePool[ idx ].w < 0.0f ) {
+            // and eventually when you die, you respawn somewhere on the boundary
+            respawnParticle( particlePool[ idx ] );
+        }
+    }
+
+    // move the particle slightly -> this should be parameterized with "TEMPERATURE"
+    particlePool[ idx ].x += jitter();
+    particlePool[ idx ].y += jitter();
+    particlePool[ idx ].z += jitter();
+
+    // are we going to bond to something? is there a nearby anchored particle?
+
+    // get the transform of the particle that you want to bond to...
+
+    // find the closest bonding location...
+
+    // and add a particle with the indicated transform
+        // right now we will use only position, but orientation is important for crystal lattice
+    const mat4 pTransform = glm::translate( mat4( 1.0f ), particlePool[ idx ].xyz() );
+    anchorParticle( particlePool[ idx ].xyz(), pTransform );
 }
 
 //=================================================================================================
+// for dispatching particle updates
+atomic_uintmax_t jobCounter;
+
+// threadpool setup
 constexpr int NUM_THREADS = 69;
+bool threadFences[ NUM_THREADS ] = { true };
+bool threadKill = false;
+std::thread threads[ NUM_THREADS + 1 ];
+//=================================================================================================
+#include "reporter.h" // proc filesystem reading
+//=================================================================================================
 int main () {
+    // dispatching threads:
+	for ( int id = 0; id <= NUM_THREADS; id++ ) {
+		threads[ id ] = ( id == NUM_THREADS - 1 ) ? std::thread(
+		   [ = ] () {
+                // this is the reporter thread
+				auto tStart = std::chrono::high_resolution_clock::now();
+                size_t update = 0;
 
-	atomic_uintmax_t jobCounter;
+                // create a screen
+                auto screen = ftxui::Screen::Create(
+                    ftxui::Dimension::Full(),   // Use full terminal width
+                    ftxui::Dimension::Fixed( 10 ) // Fixed height of 10 rows
+                );
 
-    // idea is basically that we're going to have many little oriented crystal elements
-    // and they bond to a nearby anchored ball with probability X... when they do, they
-    // have a small chance to randomize their orientation, to create defects in the
-    // otherwise regular crystal lattice. I think something inspired by the cauchy thing
-    // would make a lot of sense, I can look at how it's shaped... but I want a strong
-    // chance of a very small jitter and very, very rarely, it's a more significant
-    // alteration
+                while ( !threadKill ) {
+                    // update the proc activity samples initially, so we know how many CPUs... 
+                    updateProcData();
+                    
+                    // once every 100ms ( or whatever ) prepare an FTXUI frame for terminal output
+                    if ( update % 100 == 0 ) {
+                        // Access a specific pixel at (10, 5)
+                        auto& pixel = screen.PixelAt( 10, 5 );
+                     
+                        // Set properties of the pixel.
+                        pixel.character = U'X';
+                        pixel.foreground_color = ftxui::Color::Red;
+                        pixel.background_color = ftxui::Color::RGB( 0, 255, 0 );
+                        pixel.bold = true; // Set bold style
+                        screen.Print(); // Print the screen to the terminal
 
-    bool threadFences[ NUM_THREADS ] = { false };
-	std::thread threads[ NUM_THREADS + 1 ];                   // create thread pool
-	for ( int id = 0; id <= NUM_THREADS; id++ ) {            // do work
-		threads[ id ] = ( id == NUM_THREADS ) ? std::thread(// reporter thread
-			[ = ] () {
-				const auto tstart = std::chrono::high_resolution_clock::now();
+                        // show the maximum extents of the crystal elements
+                        // show the number of anchored partices
+                        // graphical preview of some sort? not sure
+                        // CPU activity graph with the averaged proc activity
+                    }
 
+                    // sleep this thread for 1ms... or whatever the proc polling interval is
+                    update++;
+                    std::this_thread::sleep_for( 1ms );
+
+                    if ( update == 1000 ) {
+                        cout << "Killing Worker Threads" << endl;
+                        threadKill = true;
+                        break;
+                    }
+                }
+
+                cout << "Reporter Thread Exiting" << endl;
                 return;
             }
 		) : std::thread(
-			[ id ] () {
-                // this thread knows its id...
-                cout << NUM_THREADS << " " << id << endl;
-                anchorParticle( vec3( id ) );
+			[ = ] () {
+                // this is one of the worker threads...
+                while ( !threadKill ) {
+                    // check my fence...
+                    if ( threadFences[ id ] ) { // if I'm operating, hit the jobCounter
+                        // do a particle update based on the number returned
+                        // rng jitter( -1.0, 1.0f );
+                        // particleUpdate( jobCounter.fetch_add( 1 ), jitter );
+                    } else {
+                        // if I'm not, sleep 1ms
+                        std::this_thread::sleep_for( 1ms );
+                        cout << "I'm dead " << id << endl;
+                    }
+                }
                 return;
 			}
 		);
 	}
-
-    for ( auto& [ cell, ptrVec ] : anchoredParticles ) {
-        if ( ptrVec.size() != 0 ) {
-            mat4 mat = *ptrVec[ 0 ].get();
-            cout << "found anchored" << endl << glm::to_string( mat ) << endl;
-        }
-    }
 
 	return 0;
 }
