@@ -208,7 +208,7 @@ atomic_uintmax_t jobCounter;
 
 // threadpool setup
 constexpr int NUM_THREADS = 69;
-bool threadFences[ NUM_THREADS ] = { true };
+bool threadFences[ NUM_THREADS ];
 bool threadKill = false;
 std::thread threads[ NUM_THREADS ];
 //=================================================================================================
@@ -217,6 +217,13 @@ std::thread threads[ NUM_THREADS ];
 int main () {
     // an initial point in the model, so we have something to bond to
     anchorParticle( vec3( 0.0f ), mat4( 1.0f ) );
+
+    // also, we need to make sure there are particles to update...
+    particlePool.resize( 1'000'000 );
+
+    // set all the thread fences "true"
+    for ( auto& fence : threadFences )
+        fence = true;
 
     // "service" thread, to keep the proc data updated
     std::thread procUpdaterThread = std::thread(
