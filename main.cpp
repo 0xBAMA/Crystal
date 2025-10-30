@@ -306,7 +306,7 @@ int main () {
                 return;
             }
 		) : std::thread(
-			[=] () {
+			[&] () {
                 // this is one of the worker threads...
                 thread_local const int myThreadID = id;
                 while ( !threadKill ) {
