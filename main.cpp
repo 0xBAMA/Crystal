@@ -232,7 +232,7 @@ int main () {
 	for ( int id = 0; id < NUM_THREADS; id++ ) {
         const int myThreadID = id;
 		threads[ myThreadID ] = ( myThreadID == 0 ) ? std::thread(
-		   [=] () { // this is the reporter thread
+		   [&] () { // this is the reporter thread
 				auto tStart = std::chrono::high_resolution_clock::now();
                 size_t update = 0;
 
