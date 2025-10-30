@@ -334,7 +334,18 @@ int main () {
                 });
 
                 auto window_3 = Window({
-                  .inner = DummyWindowContent(),
+                  .inner = Renderer([] (bool focused) {
+                    Elements temp, accum;
+                    for ( int j = 0; j < 6; j++ ) {
+                        for ( int i = 0; i < 12; i++ ) {
+                            int idx = i + 6 * j;
+                            temp.push_back( text( " " ) | bgcolor( Color::RGB( 0, 255 * usagePercentage[ idx ], 0 ) ) );
+                        }
+                        accum.push_back( hbox( temp ) );
+                        temp.resize( 0 );
+                    }
+                    return vbox( accum );
+                    }),
                   .title = "My window",
                   .left = 60,
                   .top = 30,
@@ -355,10 +366,16 @@ int main () {
                 });
 
                 auto display_win_1 = Renderer([] (bool focused) {
-                  if (focused)
-                    return text("My interface") | inverted;
-                  else
-                    return text("My interface");
+                    Elements temp, accum;
+                    for ( int j = 0; j < 6; j++ ) {
+                        for ( int i = 0; i < 12; i++ ) {
+                            int idx = i + 6 * j;
+                            temp.push_back( text( " " ) | bgcolor( Color::RGB( 0, 255 * usagePercentage[ idx ], 0 ) ) );
+                        }
+                        accum.push_back( hbox( temp ) );
+                        temp.resize( 0 );
+                    }
+                    return vbox( accum );
                 });
 
                 auto layout = Container::Vertical({
@@ -376,35 +393,6 @@ int main () {
 
                    sleep_for( 100ms );
                 }
-
-/*
-                while ( !threadKill ) {
-                    // update the proc activity samples initially, so we know how many CPUs... 
-                    updateProcData();
-                    
-                    // once every 100ms ( or whatever ) prepare an FTXUI frame for terminal output
-                    if ( update % 100 == 0 ) {
-
-                        // Access a specific pixel at (10, 5)
-                        auto& pixel = screen.PixelAt( 10, 5 );
-
-                        // Set properties of the pixel.
-                        pixel.character = U'X';
-                        pixel.foreground_color = ftxui::Color::Red;
-                        pixel.background_color = ftxui::Color::RGB( 0, 255, 0 );
-                        pixel.bold = true; // Set bold style
-                        screen.Print(); // Print the screen to the terminal
-
-                        // show the maximum extents of the crystal elements
-                        // show the number of anchored partices
-                        // graphical preview of some sort? not sure
-                        // CPU activity graph with the averaged proc activity
-                    }
-
-                    // sleep this thread for 1ms... or whatever the proc polling interval is
-                    update++;
-                    std::this_thread::sleep_for( 1ms );
-*/
 
                 cout << "Killing Worker Threads" << endl;
                 threadKill = true;
