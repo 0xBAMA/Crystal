@@ -83,22 +83,3 @@ void updateProcData () {
     // ready for the next interval
     ++lCount;
 }
-
-Component DummyWindowContent() {
-  class Impl : public ComponentBase {
-   private:
-    bool checked[3] = {false, false, false};
-    float slider = 50;
-
-   public:
-    Impl() {
-      Add(Container::Vertical({
-          Checkbox("Check me", &checked[0]),
-          Checkbox("Check me", &checked[1]),
-          Checkbox("Check me", &checked[2]),
-          Slider("Slider", &slider, 0.f, 100.f),
-      }));
-    }
-  };
-  return Make<Impl>();
-}

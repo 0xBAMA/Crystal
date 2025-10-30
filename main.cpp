@@ -317,74 +317,48 @@ int main () {
                 int window_1_width = 40;
                 int window_1_height = 20;
 
+                bool checked[3] = {false, false, false};
+                float slider = 50;
+
                 auto window_1 = Window({
-                  .inner = DummyWindowContent(),
-                  .title = "First window",
-                  .left = &window_1_left,
-                  .top = &window_1_top,
-                  .width = &window_1_width,
-                  .height = &window_1_height,
+                    .inner = Container::Vertical({
+                        Checkbox("Check me", &checked[0]),
+                        Checkbox("Check me", &checked[1]),
+                        Checkbox("Check me", &checked[2]),
+                        Slider("Slider", &slider, 0.f, 100.f),
+                    }),
+                    .title = "Control Window",
+                    .left = &window_1_left,
+                    .top = &window_1_top,
+                    .width = &window_1_width,
+                    .height = &window_1_height,
                 });
 
                 auto window_2 = Window({
-                  .inner = DummyWindowContent(),
-                  .title = "My window",
-                  .left = 40,
-                  .top = 20,
-                });
-
-                auto window_3 = Window({
-                  .inner = Renderer([] (bool focused) {
-                    Elements temp, accum;
-                    for ( int j = 0; j < 6; j++ ) {
-                        for ( int i = 0; i < 12; i++ ) {
-                            int idx = i + 6 * j;
-                            temp.push_back( text( " " ) | bgcolor( Color::RGB( 0, 255 * usagePercentage[ idx ], 0 ) ) );
+                    .inner = Renderer([] (bool focused) {
+                        Elements temp, accum;
+                        for ( int j = 0; j < 6; j++ ) {
+                            for ( int i = 0; i < 12; i++ ) {
+                                int idx = i + 6 * j;
+                                temp.push_back( text( " " ) | bgcolor( Color::RGB( 0, 255 * usagePercentage[ idx ], 0 ) ) );
+                            }
+                            accum.push_back( hbox( temp ) );
+                            temp.resize( 0 );
                         }
-                        accum.push_back( hbox( temp ) );
-                        temp.resize( 0 );
-                    }
-                    return vbox( accum );
+                        return vbox( accum );
                     }),
-                  .title = "My window",
-                  .left = 60,
-                  .top = 30,
+                    .title = "CPU Activity",
+                    .width = 14,
+                    .height = 8,
                 });
-
-                auto window_4 = Window({
-                  .inner = DummyWindowContent(),
-                });
-
-                auto window_5 = Window({});
 
                 auto window_container = Container::Stacked({
                   window_1,
                   window_2,
-                  window_3,
-                  window_4,
-                  window_5,
-                });
-
-                auto display_win_1 = Renderer([] (bool focused) {
-                    Elements temp, accum;
-                    for ( int j = 0; j < 6; j++ ) {
-                        for ( int i = 0; i < 12; i++ ) {
-                            int idx = i + 6 * j;
-                            temp.push_back( text( " " ) | bgcolor( Color::RGB( 0, 255 * usagePercentage[ idx ], 0 ) ) );
-                        }
-                        accum.push_back( hbox( temp ) );
-                        temp.resize( 0 );
-                    }
-                    return vbox( accum );
-                });
-
-                auto layout = Container::Vertical({
-                  display_win_1,
-                  window_container,
                 });
 
                 auto screen = ScreenInteractive::TerminalOutput();
-                ftxui::Loop loop( &screen, layout );
+                ftxui::Loop loop( &screen, window_container );
 
                 // "main loop"
                 while (!loop.HasQuitted()) {
@@ -394,12 +368,11 @@ int main () {
                    sleep_for( 100ms );
                 }
 
-                cout << "Killing Worker Threads" << endl;
+                // signal that all threads should exit
                 threadKill = true;
 
                 // save the data out, or whatever
 
-                cout << "Reporter Thread Exiting" << endl;
                 return;
             }
 		) : std::thread(
@@ -414,23 +387,19 @@ int main () {
                     } else {
                         // if I'm not, sleep 1ms
                         std::this_thread::sleep_for( 1ms );
-                        // cout << "I'm dead " << myThreadID << endl;
                     }
                 }
-                // cout << "Thread " << id << " Exiting" << endl;
                 return;
 			}
 		);
 	}
 
+    // join all worker threads back to main
 	for ( auto& thread : threads )
 		thread.join();
 
+    // join the proc updater thread back to main
     procUpdaterThread.join();
-
-    cout << "All threads should be finished..." << endl;
-    cout << "sizeof(uintmax_t)=" << sizeof( uintmax_t ) << endl;
-    cout << "sizeof(size_t)=" << sizeof( size_t ) << endl;
 
 	return 0;
 }
