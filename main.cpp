@@ -326,6 +326,12 @@ int main () {
                         Checkbox("Check me", &checked[1]),
                         Checkbox("Check me", &checked[2]),
                         Slider("Slider", &slider, 0.f, 100.f),
+                        Renderer( [] () {
+                            return vbox({
+                                text( "Test" ) | color( Color::RGB( 255, 34, 0 ) ),
+                                text( "Test" ) | color( Color::RGB( 127, 127, 127 ) ) | bgcolor( Color::RGB( 34, 0, 0 ) ),
+                            });
+                        }),
                     }),
                     .title = "Control Window",
                     .left = &window_1_left,
