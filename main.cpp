@@ -354,17 +354,11 @@ int main () {
                   window_5,
                 });
 
-                auto display_win_1 = Renderer([&] {
-                    string s;
-                    int i = 0;
-                    for ( auto& p : usagePercentage ) {
-                        s += std::to_string( p ) + ( ( i++ % 8 == 0 ) ? "\n" : " " );
-                    }
-                    return text( s + "window_1: " +  //
-                            std::to_string(window_1_width) + "x" +
-                            std::to_string(window_1_height) + " + " +
-                            std::to_string(window_1_left) + "," +
-                            std::to_string(window_1_top));
+                auto display_win_1 = Renderer([] (bool focused) {
+                  if (focused)
+                    return text("My interface") | inverted;
+                  else
+                    return text("My interface");
                 });
 
                 auto layout = Container::Vertical({
@@ -373,14 +367,9 @@ int main () {
                 });
 
                 auto screen = ScreenInteractive::TerminalOutput();
-                // screen.Loop(layout);
-
-
-            // this is another way... but still the windows don't update... hmm.
-
                 ftxui::Loop loop( &screen, layout );
 
-                 // Or in a loop:
+                // "main loop"
                 while (!loop.HasQuitted()) {
                    screen.RequestAnimationFrame();
                    loop.RunOnce();
