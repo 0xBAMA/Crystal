@@ -1,8 +1,10 @@
 //=================================================================================================
 // command line output
+#include <string>
 #include <iostream>
 using std::cout;
 using std::endl;
+using std::string;
 //=================================================================================================
 // basic containers
 #include <vector>
@@ -25,6 +27,7 @@ using std::lock_guard;
 // thread stuff
 #include <thread>
 using std::thread;
+using std::this_thread::sleep_for;
 //=================================================================================================
 // shared_ptr
 #include <memory>
@@ -41,7 +44,8 @@ using std::atomic_uintmax_t;
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/screen.hpp>
 #include <ftxui/screen/color.hpp>
- 
+
+#include <ftxui/component/loop.hpp>
 #include <ftxui/component/captured_mouse.hpp>  // for ftxui
 #include <ftxui/component/component.hpp>  // for Checkbox, Renderer, Vertical
 #include <ftxui/component/component_base.hpp>      // for ComponentBase
@@ -287,7 +291,7 @@ std::thread threads[ NUM_THREADS ];
 #include "reporter.h" // proc filesystem reading
 //=================================================================================================
 int main () {
-    // an initial point in the model
+    // an initial point in the model, so we have something to bond to
     anchorParticle( vec3( 0.0f ), mat4( 1.0f ) );
 
     // "service" thread, to keep the proc data updated
@@ -304,46 +308,85 @@ int main () {
 	for ( int id = 0; id < NUM_THREADS; id++ ) {
         const int myThreadID = id;
 		threads[ myThreadID ] = ( myThreadID == 0 ) ? std::thread(
-		   [=] () {
-                // this is the reporter thread
+		   [=] () { // this is the reporter thread
 				auto tStart = std::chrono::high_resolution_clock::now();
                 size_t update = 0;
 
-                auto screen = ScreenInteractive::FitComponent();
-                auto button_quit = Button("Quit", screen.ExitLoopClosure());
-                auto window_1= Window({
-                    .inner = vbox{ text( "test1" ) },
-                    .title = "First window",
+                int window_1_left = 20;
+                int window_1_top = 10;
+                int window_1_width = 40;
+                int window_1_height = 20;
+
+                auto window_1 = Window({
+                  .inner = DummyWindowContent(),
+                  .title = "First window",
+                  .left = &window_1_left,
+                  .top = &window_1_top,
+                  .width = &window_1_width,
+                  .height = &window_1_height,
                 });
 
-                auto window_2= Window({
-                    .inner = text( "test2" ),
-                    .title = "Second window",
+                auto window_2 = Window({
+                  .inner = DummyWindowContent(),
+                  .title = "My window",
+                  .left = 40,
+                  .top = 20,
                 });
 
-                auto container = Container::Stacked({
-                    button_quit,
-                    window_1,
-                    window_2,
+                auto window_3 = Window({
+                  .inner = DummyWindowContent(),
+                  .title = "My window",
+                  .left = 60,
+                  .top = 30,
                 });
 
-                ftxui::Loop loop( screen.get(), container );
+                auto window_4 = Window({
+                  .inner = DummyWindowContent(),
+                });
 
-                /*
-                auto screen = ScreenInteractive::FitComponent();
+                auto window_5 = Window({});
+
+                auto window_container = Container::Stacked({
+                  window_1,
+                  window_2,
+                  window_3,
+                  window_4,
+                  window_5,
+                });
+
+                auto display_win_1 = Renderer([&] {
+                    string s;
+                    int i = 0;
+                    for ( auto& p : usagePercentage ) {
+                        s += std::to_string( p ) + ( ( i++ % 8 == 0 ) ? "\n" : " " );
+                    }
+                    return text( s + "window_1: " +  //
+                            std::to_string(window_1_width) + "x" +
+                            std::to_string(window_1_height) + " + " +
+                            std::to_string(window_1_left) + "," +
+                            std::to_string(window_1_top));
+                });
+
+                auto layout = Container::Vertical({
+                  display_win_1,
+                  window_container,
+                });
+
                 auto screen = ScreenInteractive::TerminalOutput();
-                auto renderer = Renderer([] {
-                  return text("My interface");
-                });
-                auto component = CatchEvent( renderer, [ & ]( Event event ) {
-                  if ( event == Event::Character( 'q' ) || threadKill ) {
-                    screen.ExitLoopClosure()();
-                    return true;
-                  }
-                  return false;
-                });
-                screen.Loop( component );
-                */
+                // screen.Loop(layout);
+
+
+            // this is another way... but still the windows don't update... hmm.
+
+                ftxui::Loop loop( &screen, layout );
+
+                 // Or in a loop:
+                while (!loop.HasQuitted()) {
+                   screen.RequestAnimationFrame();
+                   loop.RunOnce();
+
+                   sleep_for( 100ms );
+                }
 
 /*
                 while ( !threadKill ) {
@@ -397,7 +440,7 @@ int main () {
                         // cout << "I'm dead " << myThreadID << endl;
                     }
                 }
-                cout << "Thread " << id << " Exiting" << endl;
+                // cout << "Thread " << id << " Exiting" << endl;
                 return;
 			}
 		);

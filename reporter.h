@@ -15,13 +15,15 @@ struct CpuData {
 
 std::vector< CpuData > lCpus;  // Store last readings
 std::vector< CpuData > cCpus;  // Store current readings
-
 std::vector< float > usagePercentage;
 
 void updateProcData () {
     static size_t lCount = 0; // Loop counter
     std::ifstream statFile( "/proc/stat" );
     std::string line;
+
+    cCpus.resize( 0 );
+    cCpus.reserve( 256 );
 
     while ( std::getline( statFile, line ) ) {
         std::istringstream ss( line );
@@ -54,7 +56,7 @@ void updateProcData () {
     }
 
     // Ensure lCpus and cCpus have the same size
-    if ( lCpus.size() != cCpus.size() ) {
+    if ( lCount == 0 ) {
         lCpus.resize( cCpus.size() );
         usagePercentage.resize( cCpus.size() );
     }
@@ -70,7 +72,8 @@ void updateProcData () {
             if ( dTotal == 0 ) dTotal = 1;  // Avoid division by 0
 
             // store CPU usage
-            usagePercentage[ i ] = ( dUsed / dTotal );
+            usagePercentage[ i ] = 0.9f * usagePercentage[ i ] + 0.1f * ( dUsed / dTotal );
+            // cout << "usage: " << i << " " << usagePercentage[ i ] << endl;
         }
 
         // Store the current reading for next iteration
@@ -81,29 +84,21 @@ void updateProcData () {
     ++lCount;
 }
 
+Component DummyWindowContent() {
+  class Impl : public ComponentBase {
+   private:
+    bool checked[3] = {false, false, false};
+    float slider = 50;
 
-void Nested(std::string path) {
-  auto screen = ScreenInteractive::FitComponent();
-  auto back_button = Button("Back", screen.ExitLoopClosure());
-  auto goto_1 = Button("Goto /1", [path] { Nested(path + "/1"); });
-  auto goto_2 = Button("Goto /2", [path] { Nested(path + "/2"); });
-  auto goto_3 = Button("Goto /3", [path] { Nested(path + "/3"); });
-  auto layout = Container::Vertical({
-      back_button,
-      goto_1,
-      goto_2,
-      goto_3,
-  });
-  auto renderer = Renderer(layout, [&] {
-    return vbox({
-               text("path: " + path),
-               separator(),
-               back_button->Render(),
-               goto_1->Render(),
-               goto_2->Render(),
-               goto_3->Render(),
-           }) |
-           border;
-  });
-  screen.Loop(renderer);
+   public:
+    Impl() {
+      Add(Container::Vertical({
+          Checkbox("Check me", &checked[0]),
+          Checkbox("Check me", &checked[1]),
+          Checkbox("Check me", &checked[2]),
+          Slider("Slider", &slider, 0.f, 100.f),
+      }));
+    }
+  };
+  return Make<Impl>();
 }
