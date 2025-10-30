@@ -5,6 +5,7 @@
 using std::cout;
 using std::endl;
 using std::string;
+using std::to_string;
 //=================================================================================================
 // basic containers
 #include <vector>
@@ -118,8 +119,8 @@ vector< vec4 > particlePool;
 
 // get a point on the boundary
 void respawnParticle ( vec4 p ) {
-    rngi pick( 0, 2 );
-    rng pick2( 0.0f, 1.0f );
+    thread_local rngi pick( 0, 2 );
+    thread_local rng pick2( 0.0f, 1.0f );
 
     bool face = ( pick2() < 0.5f );
     constexpr float margin = 10.0f;
@@ -146,7 +147,7 @@ void respawnParticle ( vec4 p ) {
     p.w = 100.0f; // I think this is a nice mechanism - it can wander, but in a bounded way - when it hits zero, respawn
 }
 
-void anchorParticle ( vec3 p, const mat4 pTransform ) {
+void anchorParticle ( vec3 p, const mat4 &pTransform ) {
     // we need to anchor this particle... but first, lock the mutex so only one thread can do this at once
     lock_guard< mutex > lock( anchoredParticlesGuard ); // mutex object entering scope locks... declaration is blocking 
 
@@ -253,14 +254,20 @@ int main () {
 
                 auto window_1 = Window({
                     .inner = Container::Vertical({
-                        Checkbox("Check me", &checked[0]),
-                        Checkbox("Check me", &checked[1]),
-                        Checkbox("Check me", &checked[2]),
-                        Slider("Slider", &slider, 0.f, 100.f),
-                        Renderer( [] () {
+                        // Checkbox("Check me", &checked[0]),
+                        // Checkbox("Check me", &checked[1]),
+                        // Checkbox("Check me", &checked[2]),
+                        // Slider("Slider", &slider, 0.f, 100.f),
+                        Renderer( [&] ( bool focused ) {
+                            auto c1 = color( Color::RGB( 255, 34, 0 ) );
+                            auto c2 = color( Color::RGB( 255, 255, 34 ) );
                             return vbox({
-                                text( "Test" ) | color( Color::RGB( 255, 34, 0 ) ),
-                                text( "Test" ) | color( Color::RGB( 127, 127, 127 ) ) | bgcolor( Color::RGB( 34, 0, 0 ) ),
+                                hbox({ text( "Job Counter:         " ) | c1, text( std::to_string( jobCounter.load() ) ) | c2 }),
+                                hbox({ text( "Anchored Particles:  " ) | c1, text( std::to_string( numAnchored ) ) | c2 }),
+                                hbox({ text( "Extents:" ) | c1 }),
+                                hbox({ text( " x:  " ) | c1, text( to_string( minExtents.x ) + " " ) | c2, text( to_string( maxExtents.x ) ) | c2 }),
+                                hbox({ text( " y:  " ) | c1, text( to_string( minExtents.y ) + " " ) | c2, text( to_string( maxExtents.y ) ) | c2 }),
+                                hbox({ text( " z:  " ) | c1, text( to_string( minExtents.z ) + " " ) | c2, text( to_string( maxExtents.z ) ) | c2 }),
                             });
                         }),
                     }),
@@ -295,7 +302,15 @@ int main () {
                 });
 
                 auto screen = ScreenInteractive::TerminalOutput();
-                ftxui::Loop loop( &screen, window_container );
+                auto ftxDAG = CatchEvent( window_container, [&]( Event event ) {
+                    if ( event == Event::Character('q') ) {
+                        screen.ExitLoopClosure()();
+                        return true;
+                    }
+                    return false;
+                });
+
+                ftxui::Loop loop( &screen, ftxDAG );
 
                 // "main loop"
                 while (!loop.HasQuitted()) {
