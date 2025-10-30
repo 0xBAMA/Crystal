@@ -290,6 +290,16 @@ int main () {
     // an initial point in the model
     anchorParticle( vec3( 0.0f ), mat4( 1.0f ) );
 
+    // "service" thread, to keep the proc data updated
+    std::thread procUpdaterThread = std::thread(
+        [&]() {
+            while ( !threadKill ) {    
+                updateProcData();
+                sleep_for( 5ms );
+            }
+        }
+    );
+
     // dispatching threads:
 	for ( int id = 0; id < NUM_THREADS; id++ ) {
         const int myThreadID = id;
@@ -396,8 +406,11 @@ int main () {
 	for ( auto& thread : threads )
 		thread.join();
 
+    procUpdaterThread.join();
+
     cout << "All threads should be finished..." << endl;
     cout << "sizeof(uintmax_t)=" << sizeof( uintmax_t ) << endl;
+    cout << "sizeof(size_t)=" << sizeof( size_t ) << endl;
 
 	return 0;
 }
