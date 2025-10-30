@@ -168,25 +168,27 @@ void anchorParticle ( vec3 p, const mat4 pTransform ) {
 }
 
 // this is the update, operating on a particular particle
+const float temperature = 3.0f;
+thread_local rng jitter( -temperature, temperature );
 void particleUpdate ( uintmax_t jobIndex ) {
     uintmax_t idx = jobIndex % particlePool.size();
+    vec4 &particle =  particlePool[ idx ];
 
     // oob decrement + respawn logic
-    if ( glm::any( glm::lessThanEqual( particlePool[ idx ].xyz(), vec3( minExtents - ivec3( 10 ) ) ) ) ||
-        glm::any( glm::greaterThanEqual( particlePool[ idx ].xyz(), vec3( maxExtents + ivec3( 10 ) ) ) ) ) {
+    if ( glm::any( glm::lessThanEqual( particle.xyz(), vec3( minExtents - ivec3( 10 ) ) ) ) ||
+        glm::any( glm::greaterThanEqual( particle.xyz(), vec3( maxExtents + ivec3( 10 ) ) ) ) ) {
         // idea is that when you stray outside of the bounding volume, you suffer some attrition...
-        particlePool[ idx ].w--;
-        if ( particlePool[ idx ].w < 0.0f ) {
+        particle.w--;
+        if ( particle.w < 0.0f ) {
             // and eventually when you die, you respawn somewhere on the boundary
-            respawnParticle( particlePool[ idx ] );
+            respawnParticle( particle );
         }
     }
 
     // move the particle slightly -> this should be parameterized with "TEMPERATURE"
-    rng jitter( -1.0, 1.0f );
-    particlePool[ idx ].x += jitter();
-    particlePool[ idx ].y += jitter();
-    particlePool[ idx ].z += jitter();
+    particle.x += jitter();
+    particle.y += jitter();
+    particle.z += jitter();
 
     // are we going to bond to something? is there a nearby anchored particle?
 
@@ -196,8 +198,8 @@ void particleUpdate ( uintmax_t jobIndex ) {
 
     // and add a particle with the indicated transform
         // right now we will use only position, but orientation is important for crystal lattice
-    const mat4 pTransform = glm::translate( mat4( 1.0f ), particlePool[ idx ].xyz() );
-    anchorParticle( particlePool[ idx ].xyz(), pTransform );
+    const mat4 pTransform = glm::translate( mat4( 1.0f ), particle.xyz() );
+    anchorParticle( particle.xyz(), pTransform );
 }
 
 //=================================================================================================
