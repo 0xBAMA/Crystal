@@ -80,3 +80,30 @@ void updateProcData () {
     // ready for the next interval
     ++lCount;
 }
+
+
+void Nested(std::string path) {
+  auto screen = ScreenInteractive::FitComponent();
+  auto back_button = Button("Back", screen.ExitLoopClosure());
+  auto goto_1 = Button("Goto /1", [path] { Nested(path + "/1"); });
+  auto goto_2 = Button("Goto /2", [path] { Nested(path + "/2"); });
+  auto goto_3 = Button("Goto /3", [path] { Nested(path + "/3"); });
+  auto layout = Container::Vertical({
+      back_button,
+      goto_1,
+      goto_2,
+      goto_3,
+  });
+  auto renderer = Renderer(layout, [&] {
+    return vbox({
+               text("path: " + path),
+               separator(),
+               back_button->Render(),
+               goto_1->Render(),
+               goto_2->Render(),
+               goto_3->Render(),
+           }) |
+           border;
+  });
+  screen.Loop(renderer);
+}

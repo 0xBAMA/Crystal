@@ -41,6 +41,11 @@ using std::atomic_uintmax_t;
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/screen.hpp>
 #include <ftxui/screen/color.hpp>
+ 
+#include <ftxui/component/captured_mouse.hpp>  // for ftxui
+#include <ftxui/component/component.hpp>  // for Checkbox, Renderer, Vertical
+#include <ftxui/component/component_base.hpp>      // for ComponentBase
+#include <ftxui/component/screen_interactive.hpp>  // for ScreenInteractive
 using namespace ftxui;
 //=================================================================================================
 // math/vector stuff
@@ -191,25 +196,20 @@ void respawnParticle ( vec4 p ) {
     rng pick2( 0.0f, 1.0f );
 
     bool face = ( pick2() < 0.5f );
-    p.x = glm::mix( minExtents.x - 10, maxExtents.z + 10, pick2() );
-    p.y = glm::mix( minExtents.y - 10, maxExtents.y + 10, pick2() );
-    p.z = glm::mix( minExtents.z - 10, maxExtents.z + 10, pick2() );
+    constexpr float margin = 10.0f;
+    p.x = glm::mix( minExtents.x - margin, maxExtents.z + margin, pick2() );
+    p.y = glm::mix( minExtents.y - margin, maxExtents.y + margin, pick2() );
+    p.z = glm::mix( minExtents.z - margin, maxExtents.z + margin, pick2() );
 
     switch ( pick() ) {
         // we will be on one of the parallel x faces, flatten
-        case 0:
-            p.x = face ? minExtents.x - 10 : maxExtents.x + 10;
-            break;
+        case 0: p.x = face ? minExtents.x - margin : maxExtents.x + margin; break;
 
         // ditto, y faces
-        case 1:
-            p.y = face ? minExtents.y - 10 : maxExtents.y + 10;
-            break;
+        case 1: p.y = face ? minExtents.y - margin : maxExtents.y + margin; break;
 
         // z faces
-        case 2:
-            p.z = face ? minExtents.z - 10 : maxExtents.z + 10;
-            break;
+        case 2: p.z = face ? minExtents.z - margin : maxExtents.z + margin; break;
 
         // shouldn't hit, but will be uniform random spawn if you do
         default:
@@ -242,7 +242,7 @@ void anchorParticle ( vec3 p, const mat4 pTransform ) {
 }
 
 // this is the update, operating on a particular particle
-void particleUpdate ( uintmax_t jobIndex, rng &jitter ) {
+void particleUpdate ( uintmax_t jobIndex ) {
     uintmax_t idx = jobIndex % particlePool.size();
 
     // oob decrement + respawn logic
@@ -257,6 +257,7 @@ void particleUpdate ( uintmax_t jobIndex, rng &jitter ) {
     }
 
     // move the particle slightly -> this should be parameterized with "TEMPERATURE"
+    rng jitter( -1.0, 1.0f );
     particlePool[ idx ].x += jitter();
     particlePool[ idx ].y += jitter();
     particlePool[ idx ].z += jitter();
@@ -281,34 +282,70 @@ atomic_uintmax_t jobCounter;
 constexpr int NUM_THREADS = 69;
 bool threadFences[ NUM_THREADS ] = { true };
 bool threadKill = false;
-std::thread threads[ NUM_THREADS + 1 ];
+std::thread threads[ NUM_THREADS ];
 //=================================================================================================
 #include "reporter.h" // proc filesystem reading
 //=================================================================================================
 int main () {
+    // an initial point in the model
+    anchorParticle( vec3( 0.0f ), mat4( 1.0f ) );
+
     // dispatching threads:
-	for ( int id = 0; id <= NUM_THREADS; id++ ) {
-		threads[ id ] = ( id == NUM_THREADS - 1 ) ? std::thread(
-		   [ = ] () {
+	for ( int id = 0; id < NUM_THREADS; id++ ) {
+        const int myThreadID = id;
+		threads[ myThreadID ] = ( myThreadID == 0 ) ? std::thread(
+		   [=] () {
                 // this is the reporter thread
 				auto tStart = std::chrono::high_resolution_clock::now();
                 size_t update = 0;
 
-                // create a screen
-                auto screen = ftxui::Screen::Create(
-                    ftxui::Dimension::Full(),   // Use full terminal width
-                    ftxui::Dimension::Fixed( 10 ) // Fixed height of 10 rows
-                );
+                auto screen = ScreenInteractive::FitComponent();
+                auto button_quit = Button("Quit", screen.ExitLoopClosure());
+                auto window_1= Window({
+                    .inner = vbox{ text( "test1" ) },
+                    .title = "First window",
+                });
 
+                auto window_2= Window({
+                    .inner = text( "test2" ),
+                    .title = "Second window",
+                });
+
+                auto container = Container::Stacked({
+                    button_quit,
+                    window_1,
+                    window_2,
+                });
+
+                ftxui::Loop loop( screen.get(), container );
+
+                /*
+                auto screen = ScreenInteractive::FitComponent();
+                auto screen = ScreenInteractive::TerminalOutput();
+                auto renderer = Renderer([] {
+                  return text("My interface");
+                });
+                auto component = CatchEvent( renderer, [ & ]( Event event ) {
+                  if ( event == Event::Character( 'q' ) || threadKill ) {
+                    screen.ExitLoopClosure()();
+                    return true;
+                  }
+                  return false;
+                });
+                screen.Loop( component );
+                */
+
+/*
                 while ( !threadKill ) {
                     // update the proc activity samples initially, so we know how many CPUs... 
                     updateProcData();
                     
                     // once every 100ms ( or whatever ) prepare an FTXUI frame for terminal output
                     if ( update % 100 == 0 ) {
+
                         // Access a specific pixel at (10, 5)
                         auto& pixel = screen.PixelAt( 10, 5 );
-                     
+
                         // Set properties of the pixel.
                         pixel.character = U'X';
                         pixel.foreground_color = ftxui::Color::Red;
@@ -325,36 +362,42 @@ int main () {
                     // sleep this thread for 1ms... or whatever the proc polling interval is
                     update++;
                     std::this_thread::sleep_for( 1ms );
+*/
 
-                    if ( update == 1000 ) {
-                        cout << "Killing Worker Threads" << endl;
-                        threadKill = true;
-                        break;
-                    }
-                }
+                cout << "Killing Worker Threads" << endl;
+                threadKill = true;
+
+                // save the data out, or whatever
 
                 cout << "Reporter Thread Exiting" << endl;
                 return;
             }
 		) : std::thread(
-			[ = ] () {
+			[=] () {
                 // this is one of the worker threads...
+                thread_local const int myThreadID = id;
                 while ( !threadKill ) {
                     // check my fence...
-                    if ( threadFences[ id ] ) { // if I'm operating, hit the jobCounter
+                    if ( threadFences[ myThreadID ] ) { // if I'm operating, hit the jobCounter
                         // do a particle update based on the number returned
-                        // rng jitter( -1.0, 1.0f );
-                        // particleUpdate( jobCounter.fetch_add( 1 ), jitter );
+                        particleUpdate( jobCounter.fetch_add( 1 ) );
                     } else {
                         // if I'm not, sleep 1ms
                         std::this_thread::sleep_for( 1ms );
-                        cout << "I'm dead " << id << endl;
+                        // cout << "I'm dead " << myThreadID << endl;
                     }
                 }
+                cout << "Thread " << id << " Exiting" << endl;
                 return;
 			}
 		);
 	}
+
+	for ( auto& thread : threads )
+		thread.join();
+
+    cout << "All threads should be finished..." << endl;
+    cout << "sizeof(uintmax_t)=" << sizeof( uintmax_t ) << endl;
 
 	return 0;
 }
