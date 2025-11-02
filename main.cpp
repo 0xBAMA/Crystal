@@ -72,6 +72,10 @@ using glm::pi;
 using glm::ivec3;
 using glm::dot;
 
+// constants for shortening calculations of points + vector offsets
+constexpr vec4 p0 = vec4( 0.0f, 0.0f, 0.0f, 1.0f );
+constexpr vec4 v0 = vec4( 0.0f, 0.0f, 0.0f, 0.0f );
+
 // key hash needed for std::unordered_map with ivec3 keys
 namespace std {
 	template<> struct hash< ivec3 > {
@@ -103,7 +107,7 @@ struct gridCell {
     // keeping "count" as an atomic, separate from .size()...
         // this means we can make sure that the mat4 is fully constructed before showing as available to other threads
     std::atomic< std::int32_t > count = { 0 };
-    std::vector< shared_ptr< const mat4 > > particles;
+    std::vector< mat4 > particles;
 
     gridCell() {
         count.store( 0 );
@@ -121,7 +125,7 @@ struct gridCell {
     void Add( const mat4 pTransform ) {
         // add it to the list... mutex will be locked at this time
         count++;
-        particles.push_back( make_shared< const mat4 >( pTransform ) );
+        particles.push_back( pTransform );
     }
 
     mat4 Get( int idx ) {
@@ -129,8 +133,7 @@ struct gridCell {
         if ( count == 0 || idx >= count ) {
             return mat4( 1.0f );
         } else {
-            mat4 temp = mat4( *particles[ idx ].get() );
-            return temp;
+            return particles[ idx ];
         }
     }
 };
@@ -199,7 +202,7 @@ void particleUpdate ( uintmax_t jobIndex ) {
     thread_local const uintmax_t idx = jobIndex % particlePool.size();
     thread_local vec4 &particle = particlePool[ idx ];
 
-    // cout << "Starting Update at " << to_string( particle ) << endl;
+    cout << "Starting Update at " << to_string( particle ) << endl;
 
     // oob decrement + respawn logic
     if ( glm::any( glm::lessThanEqual( particle.xyz(), vec3( minExtents - ivec3( 10 ) ) ) ) ||
@@ -220,9 +223,9 @@ void particleUpdate ( uintmax_t jobIndex ) {
     // are we going to bond to something? is there a nearby anchored particle?
     // first, let's look at all the particles in the local neighborhood...
     thread_local std::vector< mat4 > nearbyPoints; // eventually this should be a static scratch pool per thread to avoid allocations
-    for ( thread_local int x = -1; x <= 1; x++ )
-    for ( thread_local int y = -1; y <= 1; y++ )
-    for ( thread_local int z = -1; z <= 1; z++ ) {
+    for ( int x = -1; x <= 1; x++ )
+    for ( int y = -1; y <= 1; y++ )
+    for ( int z = -1; z <= 1; z++ ) {
         thread_local const ivec3 loc = ivec3( particle.xyz() ) + ivec3( x, y, z );
         thread_local gridCell &gc = anchoredParticles[ loc ];
         thread_local const int count = gc.GetCount();
@@ -237,9 +240,6 @@ void particleUpdate ( uintmax_t jobIndex ) {
 
     // we need to find out which, if any, of these points can be anchored to...
     if ( nearbyPoints.size() != 0 ) {
-        // constants for shortening calculations of points + vector offsets
-        constexpr vec4 p0 = vec4( 0.0f, 0.0f, 0.0f, 1.0f );
-        constexpr vec4 v0 = vec4( 0.0f, 0.0f, 0.0f, 0.0f );
 
         // cout << "I have Neighbors!!" << endl;
 
@@ -250,13 +250,13 @@ void particleUpdate ( uintmax_t jobIndex ) {
         );
 
         // if we have more than one point to consider, compare them
-        for ( thread_local int i = 1; i < nearbyPoints.size(); i++ ) {
-            thread_local const float d = glm::distance(
-                particle.xyz(), ( nearbyPoints[ i ] * p0 ).xyz()
+        for ( auto& transform : nearbyPoints ) {
+            const float d = glm::distance(
+                particle.xyz(), ( transform * p0 ).xyz()
             );
             if ( d < closestPointDistance ) {
                 closestPointDistance = d;
-                closestPointTransform = nearbyPoints[ i ];
+                closestPointTransform = transform;
             }
         }
 
@@ -282,12 +282,12 @@ void particleUpdate ( uintmax_t jobIndex ) {
 
 //=================================================================================================
 // for dispatching particle updates
-atomic_uintmax_t jobCounter;
+atomic_uintmax_t jobCounter { 0 };
 
 // threadpool setup
-constexpr int NUM_THREADS = 16;
+constexpr int NUM_THREADS = 2;
 bool threadFences[ NUM_THREADS ];
-bool threadKill = false;
+bool threadKill;
 std::thread threads[ NUM_THREADS ];
 //=================================================================================================
 #include "reporter.h" // proc filesystem reading
@@ -296,6 +296,14 @@ int main () {
     // pump initial proc data
     updateProcData();
     updateProcData();
+
+    // setting initial program state
+    threadKill = false;
+    // set all the thread fences "true"
+    // cout << "Enable Worker Threads............. ";
+    for ( auto& fence : threadFences )
+        fence = true;
+    // cout << "Done." << endl;
     
     cout << "Spawning Reporter Thread.......... ";
 	std::thread reporterThread = std::thread(
@@ -376,18 +384,18 @@ int main () {
             // cout << "Anchoring Initial Seed Particles.. ";
             rng pR( -2.0f, 2.0f );
             for ( int i = 0; i < 10; i++ ) {
-                vec3 p = 10.0f * vec3( pR(), pR(), pR() );
-                anchorParticle( p, glm::translate( glm::rotate( mat4( 1.0f ), pR(), normalize( vec3( pR(), pR(), pR() ) ) ), p ) );
+                mat4 transform = glm::translate( glm::rotate( mat4( 1.0f ), pR(), normalize( vec3( pR(), pR(), pR() ) ) ), 10.0f * vec3( pR(), pR(), pR() ) );
+                anchorParticle( transform * p0, transform );
             }
             // cout << "Done." << endl;
 
-            int detectedPointCount = 0;
-            for ( auto& [k,v] : anchoredParticles )
-                for ( auto& p : v.particles ) {
-                    detectedPointCount++;
-                    cout << "found: " << to_string( *p.get() ) << " at " << to_string( k ) << endl;
-                    cout << "confirm: " << to_string( *p.get() * vec4( 0.0f, 0.0f, 0.0f, 1.0f ) ) << endl;
-                }
+            // int detectedPointCount = 0;
+            // for ( auto& [k,v] : anchoredParticles )
+                // for ( auto& p : v.particles ) {
+                    // detectedPointCount++;
+                    // cout << "found: " << to_string( p ) << " at " << to_string( k ) << endl;
+                    // cout << "confirm: " << to_string( p * vec4( 0.0f, 0.0f, 0.0f, 1.0f ) ) << endl;
+                // }
             // cout << "Confirm Contents: map has " << detectedPointCount << " elements" << endl;
 
             // we need to make sure there are particles to update...
@@ -398,17 +406,8 @@ int main () {
             }
             // cout << "Done." << endl;
 
-            sleep_for( 100ms );
-
-            // set all the thread fences "true"
-            // cout << "Enable Worker Threads............. ";
-            for ( auto& fence : threadFences )
-                fence = true;
-            // cout << "Done." << endl;
-
             // "main loop"
             // cout << "Entering Main Loop..." << endl;
-            // for ( int i = 0; i < 15; i++ ) cout << endl;
             // ftxui::Loop loop( &screen, ftxDAG );
             // bool timeout = ( float( std::chrono::duration< float, std::milli >( high_resolution_clock::now() - tStart ).count() ) > 1000.0f );
             // while (!loop.HasQuitted() && !timeout ) {
@@ -417,7 +416,7 @@ int main () {
                // sleep_for( 100ms );
             // }
 
-           // sleep_for( 10000ms );
+           sleep_for( 1000ms );
 
             // signal that all threads should exit
             threadKill = true;
@@ -439,8 +438,6 @@ int main () {
     // ( void ) temp;
     // cout << "finished." << endl;
 
-    sleep_for( 100ms );
-     
     // "service" thread, to keep the proc data updated
     cout << "Spawning Proc Updater Thread...... ";
     std::thread procUpdaterThread = std::thread(
@@ -453,8 +450,6 @@ int main () {
     );
     cout << "Done." << endl;
 
-    sleep_for( 100ms );
-
     // dispatching threads:
     cout << "Dispatching Worker Threads (" << NUM_THREADS << ")... ";
 	for ( int id = 0; id < NUM_THREADS; id++ ) {
@@ -462,16 +457,20 @@ int main () {
 			[&] () {
                 // this is one of the worker threads...
                 thread_local int myThreadID = id;
+                cout << "thread " << myThreadID << " init" << endl;
+                sleep_for( 100ms );
                 while ( !threadKill ) {
                     // check my fence...
                     if ( threadFences[ myThreadID ] ) { // if I'm operating, hit the jobCounter
                         // do a particle update based on the number returned
+                        cout << "thread " << myThreadID << " attempting update" << endl;
                         particleUpdate( jobCounter.fetch_add( 1 ) );
                     } else {
                         // if I'm not, sleep 1ms
                         std::this_thread::sleep_for( 1ms );
                     }
                 }
+                cout << "thread " << myThreadID << " leaving scope" << endl;
                 return;
 			}
 		);
