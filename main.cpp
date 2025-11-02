@@ -26,6 +26,11 @@ using std::chrono::high_resolution_clock;
 using std::mutex;
 using std::lock_guard;
 //=================================================================================================
+// std::clamp
+#include <algorithm>
+using std::clamp;
+using std::max;
+//=================================================================================================
 // thread stuff
 #include <thread>
 using std::thread;
@@ -65,9 +70,11 @@ using namespace ftxui;
 #include <glm/ext/matrix_clip_space.hpp>	// glm::perspective
 #include <glm/ext/scalar_constants.hpp>		// glm::pi
 #include <glm/gtx/string_cast.hpp>
+using glm::vec2;
 using glm::vec3;
 using glm::vec4;
 using glm::mat4;
+using glm::ivec2;
 using glm::pi;
 using glm::ivec3;
 using glm::dot;
@@ -75,6 +82,7 @@ using glm::dot;
 // constants for shortening calculations of points + vector offsets
 constexpr vec4 p0 = vec4( 0.0f, 0.0f, 0.0f, 1.0f );
 constexpr vec4 v0 = vec4( 0.0f, 0.0f, 0.0f, 0.0f );
+constexpr mat4 identity = mat4( 1.0f );
 
 // key hash needed for std::unordered_map with ivec3 keys
 namespace std {
@@ -84,13 +92,20 @@ namespace std {
 			std::size_t h1 = std::hash< int >{}( s.x );
 			std::size_t h2 = std::hash< int >{}( s.y );
 			std::size_t h3 = std::hash< int >{}( s.z );
-			return h1 ^ ( h2 << 4 ) ^ ( h3 << 8 );
+			return h1 ^ ( h2 << 12 ) ^ ( h3 << 24 );
 		}
 	};
 }
 //=================================================================================================
 // random number generation utilities
 #include "random.h"
+//===== STB ===========================================================================================================
+// Sean Barrett's public domain load, save, resize libs - need corresponding define in the ./stb/impl.cc file,
+	// before their inclusion, which is done by the time compilation hits this point - they can be straight
+	// included, here, as follows:
+#include "stb/stb_image.h"          // https://github.com/nothings/stb/blob/master/stb_image.h
+#include "stb/stb_image_write.h"	// https://github.com/nothings/stb/blob/master/stb_image_write.h
+#include "stb/stb_image_resize.h"	// https://github.com/nothings/stb/blob/master/stb_image_resize.h
 //=================================================================================================
 
 // going to use this as a threshold for a kind of "bonding affinity"... may need more detail here than 1 degree of freedom
@@ -103,32 +118,34 @@ namespace std {
     // return tan( dot( tA, tB ) * pi * 2.0f );
 // }
 
+float remap ( float in, float aL, float aH, float bL, float bH ) {
+    return bL + ( in - aL ) * ( bH - bL ) / ( aH - aL );
+}
+
 struct gridCell {
     // keeping "count" as an atomic, separate from .size()...
         // this means we can make sure that the mat4 is fully constructed before showing as available to other threads
     std::atomic< std::int32_t > count = { 0 };
-    std::vector< mat4 > particles;
+    vector< mat4 > particles;
 
     gridCell() {
         count.store( 0 );
         particles.resize( 0 );
-        particles.reserve( 128 );
     }
 
-    int32_t GetCount () {
+    int32_t GetCount () const  {
         // this should be able to rely on the count...
-        // return std::min( int( anchoredParticles[ p ].count.load() ),
-                          // int( anchoredParticles[ p ].particles.size() ) );
         return count;
+        // return std::min( int( count ), int( particles.size() ) );
     }
 
     void Add( const mat4 pTransform ) {
         // add it to the list... mutex will be locked at this time
-        count++;
         particles.push_back( pTransform );
+        count++;
     }
 
-    mat4 Get( int idx ) {
+    mat4 Get( int idx ) const {
         // get index i from the list... we need to avoid seg faulting, so return a dummy value if we don't have it
         if ( count == 0 || idx >= count ) {
             return mat4( 1.0f );
@@ -143,25 +160,20 @@ unordered_map< ivec3, gridCell > anchoredParticles;
 mutex anchoredParticlesGuard;
 
 // maintaining stats on the above container
-ivec3 minExtents = ivec3( 0 );
-ivec3 maxExtents = ivec3( 0 );
+ivec3 minExtents = ivec3( -20 );
+ivec3 maxExtents = ivec3(  20 );
 int numAnchored = 0;
 
-// the particles are the diffusion-limit mechanism
-vector< vec4 > particlePool;
-
 // get a point on the boundary
+thread_local rng pick( 0.0f, 1.0f );
 void respawnParticle ( vec4 &p ) {
-    thread_local rngi pick( 0, 2 );
-    thread_local rng pick2( 0.0f, 1.0f );
+    thread_local bool face = ( pick() < 0.5f );
+    constexpr float margin = 0.0f;
+    p.x = glm::mix( minExtents.x - margin, maxExtents.x + margin, pick() );
+    p.y = glm::mix( minExtents.y - margin, maxExtents.y + margin, pick() );
+    p.z = glm::mix( minExtents.z - margin, maxExtents.z + margin, pick() );
 
-    thread_local bool face = ( pick2() < 0.5f );
-    constexpr float margin = 10.0f;
-    p.x = glm::mix( minExtents.x - margin, maxExtents.x + margin, pick2() );
-    p.y = glm::mix( minExtents.y - margin, maxExtents.y + margin, pick2() );
-    p.z = glm::mix( minExtents.z - margin, maxExtents.z + margin, pick2() );
-
-    switch ( pick() ) {
+    switch ( int( std::floor( pick() * 3.01f ) ) ) {
         // we will be on one of the parallel x faces, flatten
         case 0: p.x = face ? minExtents.x - margin : maxExtents.x + margin; break;
 
@@ -171,7 +183,7 @@ void respawnParticle ( vec4 &p ) {
         // z faces
         case 2: p.z = face ? minExtents.z - margin : maxExtents.z + margin; break;
 
-        // shouldn't hit, but will be uniform random spawn if you do
+        // won't hit much, but will be uniform random spawn if you do
         default:
             break;
     }
@@ -192,17 +204,21 @@ void anchorParticle ( const ivec3 iP, const mat4 &pTransform ) {
     maxExtents = glm::max( iP, maxExtents );
     numAnchored++;
 
+    cout << to_string( iP ) << endl;
     // and the mutex leaves scope, unblocking for the next write access
 }
 
 // this is the update, operating on a particular particle
-const float temperature = 3.0f; // make this a sim parameter, eventually
+const float temperature = 1.0f; // make this a sim parameter, eventually
 thread_local rngN jitter( 0.0f, 0.1f );
+// the particles are the diffusion-limit mechanism
+constexpr int32_t NUM_PARTICLES = 10'000;
+vec4 particlePool[ NUM_PARTICLES ];
 void particleUpdate ( uintmax_t jobIndex ) {
-    thread_local const uintmax_t idx = jobIndex % particlePool.size();
-    thread_local vec4 &particle = particlePool[ idx ];
+    thread_local const uintmax_t idx = jobIndex % NUM_PARTICLES;
+    vec4 &particle = particlePool[ idx ];
 
-    cout << "Starting Update at " << to_string( particle ) << endl;
+    // cout << "Starting Update at " << jobIndex << " " << to_string( particle ) << endl;
 
     // oob decrement + respawn logic
     if ( glm::any( glm::lessThanEqual( particle.xyz(), vec3( minExtents - ivec3( 10 ) ) ) ) ||
@@ -222,18 +238,27 @@ void particleUpdate ( uintmax_t jobIndex ) {
 
     // are we going to bond to something? is there a nearby anchored particle?
     // first, let's look at all the particles in the local neighborhood...
-    thread_local std::vector< mat4 > nearbyPoints; // eventually this should be a static scratch pool per thread to avoid allocations
-    for ( int x = -1; x <= 1; x++ )
-    for ( int y = -1; y <= 1; y++ )
-    for ( int z = -1; z <= 1; z++ ) {
-        thread_local const ivec3 loc = ivec3( particle.xyz() ) + ivec3( x, y, z );
-        thread_local gridCell &gc = anchoredParticles[ loc ];
-        thread_local const int count = gc.GetCount();
-        if ( count > 0 ) {
-            for ( thread_local int i = 0; i < count; i++ ) {
-                cout << "attempting read at " << to_string( loc ) << " " << i << " / " << count << endl;
-                thread_local mat4 mat = gc.Get( i );
-                nearbyPoints.push_back( mat );
+    thread_local std::vector< shared_ptr< const mat4 > > nearbyPoints; // eventually this should be a static scratch pool per thread to avoid allocations
+
+    // looking at the local neighborhood...
+    const auto& s = { -1, 0, 1 };
+    for ( int x : s )
+    for ( int y : s )
+    for ( int z : s ) {
+        if ( x == 0 && y == 0 && z == 0 ) continue;
+        
+        const ivec3 loc = ivec3( particle.xyz() ) + ivec3( x, y, z );
+        bool solutionFound = false;
+        {   // I had hoped to avoid a lock on the read side, but oh well...
+            lock_guard< mutex > lock( anchoredParticlesGuard );
+            solutionFound = anchoredParticles.contains( loc );
+        }
+        if ( solutionFound ) {
+            const int count = anchoredParticles[ loc ].GetCount();
+            for ( int i = 0; i < count; i++ ) {
+                // cout << "attempting read at " << to_string( loc ) << " " << i << " / " << count << endl;
+                const mat4 mat = anchoredParticles[ loc ].Get( i );
+                nearbyPoints.push_back( make_shared< const mat4 >( mat ) );
             }
         }
     }
@@ -241,10 +266,10 @@ void particleUpdate ( uintmax_t jobIndex ) {
     // we need to find out which, if any, of these points can be anchored to...
     if ( nearbyPoints.size() != 0 ) {
 
-        // cout << "I have Neighbors!!" << endl;
+        // cout << "I have " << nearbyPoints.size() << " Neighbors!!" << endl;
 
         // finding the closest point... we know we have 1, so we start with that
-        thread_local mat4 closestPointTransform = nearbyPoints[ 0 ];
+        thread_local mat4 closestPointTransform = *nearbyPoints[ 0 ].get();
         thread_local float closestPointDistance = glm::distance(
             particle.xyz(), ( closestPointTransform * p0 ).xyz()
         );
@@ -252,23 +277,24 @@ void particleUpdate ( uintmax_t jobIndex ) {
         // if we have more than one point to consider, compare them
         for ( auto& transform : nearbyPoints ) {
             const float d = glm::distance(
-                particle.xyz(), ( transform * p0 ).xyz()
+                particle.xyz(), ( *transform.get() * p0 ).xyz()
             );
             if ( d < closestPointDistance ) {
                 closestPointDistance = d;
-                closestPointTransform = transform;
+                closestPointTransform = *transform.get();
             }
         }
 
         // some additional bonding criteria...?
-        if ( true ) { // close enough... random hash... etc
+        if ( closestPointDistance < 1.0f ) { // close enough... random hash... etc
             // figure out which of bonding sites you want to bond to... probably the closest one of them
+            // cout << "bonding at " << to_string( particle.xyz() ) << endl;
 
             // the mat4 tells us the orientation and the position of the point
 
             // and add a particle with the indicated transform
                 // right now we will use only position, but orientation is important for crystal lattice
-            thread_local const mat4 pTransform = glm::translate( mat4( 1.0f ), particle.xyz() );
+            thread_local const mat4 pTransform = glm::translate( identity, particle.xyz() );
 
             // mutex is locked, only during add... math happens outside, nice
             anchorParticle( ivec3( particle.xyz() ), pTransform );
@@ -277,7 +303,6 @@ void particleUpdate ( uintmax_t jobIndex ) {
             respawnParticle( particle ); // we will now respawn somewhere on the sim boundary
         }
     }
-
 }
 
 //=================================================================================================
@@ -285,7 +310,7 @@ void particleUpdate ( uintmax_t jobIndex ) {
 atomic_uintmax_t jobCounter { 0 };
 
 // threadpool setup
-constexpr int NUM_THREADS = 2;
+constexpr int NUM_THREADS = 1;
 bool threadFences[ NUM_THREADS ];
 bool threadKill;
 std::thread threads[ NUM_THREADS ];
@@ -331,6 +356,7 @@ int main () {
                         auto c1 = color( Color::RGB( 255, 34, 0 ) );
                         auto c2 = color( Color::RGB( 255, 255, 34 ) );
                         return vbox({
+                            hbox({ text( "Uptime:              " ) | c1, text( std::to_string( float( std::chrono::duration< float, std::milli >( high_resolution_clock::now() - tStart ).count() ) / 1000.0f ) ) | c2, text( "s" ) | c1 }),
                             hbox({ text( "Job Counter:         " ) | c1, text( std::to_string( jobCounter.load() ) ) | c2 }),
                             hbox({ text( "Anchored Particles:  " ) | c1, text( std::to_string( numAnchored ) ) | c2 }),
                             hbox({ text( "Extents:" ) | c1 }),
@@ -384,7 +410,7 @@ int main () {
             // cout << "Anchoring Initial Seed Particles.. ";
             rng pR( -2.0f, 2.0f );
             for ( int i = 0; i < 10; i++ ) {
-                mat4 transform = glm::translate( glm::rotate( mat4( 1.0f ), pR(), normalize( vec3( pR(), pR(), pR() ) ) ), 10.0f * vec3( pR(), pR(), pR() ) );
+                mat4 transform = glm::translate( glm::rotate( identity, pR(), normalize( vec3( pR(), pR(), pR() ) ) ), 10.0f * vec3( pR(), pR(), pR() ) );
                 anchorParticle( transform * p0, transform );
             }
             // cout << "Done." << endl;
@@ -400,28 +426,115 @@ int main () {
 
             // we need to make sure there are particles to update...
             // cout << "Spawning Particles................ ";
-            particlePool.resize( 100000 );
             for ( auto& p : particlePool ) {
-                respawnParticle( p );
+                // respawnParticle( p );
+                p.x = remap( pick(), 0.0f, 1.0f, -20.0f, 20.0f );
+                p.y = remap( pick(), 0.0f, 1.0f, -20.0f, 20.0f );
+                p.z = remap( pick(), 0.0f, 1.0f, -20.0f, 20.0f );
+                p.w = 100.0f;
             }
             // cout << "Done." << endl;
 
             // "main loop"
             // cout << "Entering Main Loop..." << endl;
-            // ftxui::Loop loop( &screen, ftxDAG );
-            // bool timeout = ( float( std::chrono::duration< float, std::milli >( high_resolution_clock::now() - tStart ).count() ) > 1000.0f );
-            // while (!loop.HasQuitted() && !timeout ) {
-               // screen.RequestAnimationFrame();
-               // loop.RunOnce();
-               // sleep_for( 100ms );
-            // }
+            ftxui::Loop loop( &screen, ftxDAG );
+            while (!loop.HasQuitted() ) {
+               screen.RequestAnimationFrame();
+               loop.RunOnce();
+               sleep_for( 100ms );
 
-           sleep_for( 1000ms );
+               // terminate condition:
+               // if (  ) {
+                   // screen.ExitLoopClosure()();
+               // }
+            }
+
+           // sleep_for( 10000ms );
 
             // signal that all threads should exit
             threadKill = true;
+            sleep_for( 100ms );
 
-            // save the data out, or whatever
+            // save the data out, bake out a preview or whatever for now...
+
+        // I think I want to do basic pixel binning first... get an idea of counts...
+        // then on a second pass, we inform an initial scale factor based on that max total
+        // and an additional dimming term based on the distance to a view plane, kind of idea,
+        // orthographic projection, just dropping the z term.
+
+            // create a linear buffer of all the point locations in minimum representation
+            size_t maxSize = 0;
+            vector< vec2 > points;
+            for ( auto& [k,v] : anchoredParticles ) {
+                maxSize = max( maxSize, v.particles.size() );
+                for ( auto& p : v.particles ) {
+                    vec2 pT = ( p * p0 ).xy();
+                    // cout << to_string( pT ) << endl;
+                    points.push_back( pT );
+                }
+            }
+
+            cout << "max bin is " << maxSize << endl;;
+
+
+            // anchored particles
+            int binCountsA[ 1000 * 1000 ];
+            int maxCountA = 0;
+            int nonzeroBinsA = 0;
+            for ( auto& b : binCountsA ) { b = 0; }
+            for ( auto& p : points ) {
+                ivec2 loc = ivec2(
+                    // clamp( int( remap( p.x, minExtents.x, maxExtents.x, 0.0f, 1000.0f ) ), 0, 999 ),
+                    // clamp( int( remap( p.y, minExtents.y, maxExtents.y, 0.0f, 1000.0f ) ), 0, 999 )
+                    int( remap( p.x, minExtents.x, maxExtents.x, 0.0f, 1000.0f ) ),
+                    int( remap( p.y, minExtents.y, maxExtents.y, 0.0f, 1000.0f ) )
+                );
+                binCountsA[ loc.x + 1000 * loc.y ]++;
+                maxCountA = max( maxCountA, binCountsA[ loc.x + 1000 * loc.y ] );
+            }
+
+            // free particles
+            // int binCountsF[ 1000 * 1000 ];
+            // int maxCountF = 0;
+            // for ( auto& b : binCountsF ) { b = 0; }
+            // for ( auto& p : particlePool ) {
+                // ivec2 loc = ivec2(
+                    // int( remap( p.x, minExtents.x, maxExtents.x, 0.0f, 1000.0f ) ),
+                    // int( remap( p.y, minExtents.y, maxExtents.y, 0.0f, 1000.0f ) )
+                // );
+                // binCountsF[ loc.x + 1000 * loc.y ]++;
+                // maxCountF = max( maxCountF, binCountsF[ loc.x + 1000 * loc.y ] );
+            // }
+
+            // std::ofstream out( "testCrystal.txt" );
+            // for ( int y = 0; y < 1000; y++ ) {
+                // for ( int x = 0; x < 1000; x++ ) {
+                    // out << binCountsA[ x + 1000 * y ];
+                // }
+                // out << endl;
+            // }
+            // out << endl << endl << endl;
+            // for ( int y = 0; y < 1000; y++ ) {
+                // for ( int x = 0; x < 1000; x++ ) {
+                    // out << binCountsF[ x + 1000 * y ];
+                // }
+                // out << endl;
+            // }
+            // out.flush();
+// 
+            // now preparing an image...
+
+            // write out the image
+            std::vector< uint8_t > data;
+            for ( auto& p : binCountsA ) {
+                for ( int i = 0; i < 3; i++ )
+                    // data.push_back( 255 * glm::pow( float( p ) / float( maxCountA ), 0.2f ) );
+                    data.push_back( 255 * int( p != 0 ) ), nonzeroBinsA += ( ( p != 0 ) ? 1 : 0 );
+                data.push_back( 255 );
+            }
+            stbi_write_png( string( "test.png" ).c_str(), 1000, 1000, 4, &data[ 0 ], 4000 );
+            cout << "found " << nonzeroBinsA << " bins" << endl;
+            
 
             return;
         }
@@ -429,13 +542,13 @@ int main () {
 
     // touch some chunk of the hashmap to preallocate?
     // cout << "hashmap preallocate... ";
-    // mat4 temp;
-    // for ( int x = -10; x < 10; x++ ) {
-    // for ( int y = -10; y < 10; y++ ) {
-    // for ( int z = -10; z < 10; z++ ) {
-        // temp = readParticle( ivec3( x, y, z ), 0 );
-    // }}}
-    // ( void ) temp;
+    mat4 temp;
+    for ( int x = -20; x < 20; x++ ) {
+    for ( int y = -20; y < 20; y++ ) {
+    for ( int z = -20; z < 20; z++ ) {
+        temp = anchoredParticles[ ivec3( x, y, z ) ].Get( 0 );
+    }}}
+    ( void ) temp;
     // cout << "finished." << endl;
 
     // "service" thread, to keep the proc data updated
@@ -457,20 +570,20 @@ int main () {
 			[&] () {
                 // this is one of the worker threads...
                 thread_local int myThreadID = id;
-                cout << "thread " << myThreadID << " init" << endl;
+                // cout << "thread " << myThreadID << " init" << endl;
                 sleep_for( 100ms );
                 while ( !threadKill ) {
                     // check my fence...
                     if ( threadFences[ myThreadID ] ) { // if I'm operating, hit the jobCounter
                         // do a particle update based on the number returned
-                        cout << "thread " << myThreadID << " attempting update" << endl;
+                        // cout << "thread " << myThreadID << " attempting update" << endl;
                         particleUpdate( jobCounter.fetch_add( 1 ) );
                     } else {
                         // if I'm not, sleep 1ms
                         std::this_thread::sleep_for( 1ms );
                     }
                 }
-                cout << "thread " << myThreadID << " leaving scope" << endl;
+                // cout << "thread " << myThreadID << " leaving scope" << endl;
                 return;
 			}
 		);
