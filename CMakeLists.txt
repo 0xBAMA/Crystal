@@ -16,7 +16,10 @@ set (CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/bin")
 
 find_package(ftxui REQUIRED)
 add_executable(main main.cpp)
+add_library( STB_ImageUtilsWrapper STATIC stb/impl.cc )
+
 target_link_libraries(main
+  PUBLIC STB_ImageUtilsWrapper
   PRIVATE ftxui::screen
   PRIVATE ftxui::dom
   PRIVATE ftxui::component
