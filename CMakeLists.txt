@@ -4,8 +4,13 @@ project( NQADE VERSION 1.2 LANGUAGES C CXX )
 
 set( CMAKE_CXX_STANDARD 20 )
 set( CMAKE_CXX_STANDARD_REQUIRED True )
-set( CMAKE_CXX_FLAGS "-std=c++20 -O4 -mavx" )
+# set( CMAKE_CXX_FLAGS "-std=c++20 -O4 -mavx" )
+set( CMAKE_CXX_FLAGS "-std=c++20 -mavx" )
+
 set( CMAKE_REQUIRED_FLAGS -lstdc++fs )
+
+# build type set to debug
+set( CMAKE_BUILD_TYPE Debug )
 
 set (CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/bin")
 
