@@ -19,6 +19,7 @@ using std::unordered_map;
 // timekeeping
 #include <chrono>
 using namespace std::chrono_literals;
+using std::chrono::high_resolution_clock;
 //=================================================================================================
 // mutex / lock stuff
 #include <mutex>
@@ -32,8 +33,8 @@ using std::this_thread::sleep_for;
 //=================================================================================================
 // shared_ptr
 #include <memory>
-using std::make_unique;
-using std::unique_ptr;
+using std::make_shared;
+using std::shared_ptr;
 //=================================================================================================
 // specific width types + atomics, for "program counter"
 #include <cstdint>
@@ -101,8 +102,37 @@ namespace std {
 struct gridCell {
     // keeping "count" as an atomic, separate from .size()...
         // this means we can make sure that the mat4 is fully constructed before showing as available to other threads
-    std::atomic< std::int32_t > count;
-    std::vector< unique_ptr< const mat4 > > particles;
+    std::atomic< std::int32_t > count = { 0 };
+    std::vector< shared_ptr< const mat4 > > particles;
+
+    gridCell() {
+        count.store( 0 );
+        particles.resize( 0 );
+        particles.reserve( 128 );
+    }
+
+    int32_t GetCount () {
+        // this should be able to rely on the count...
+        // return std::min( int( anchoredParticles[ p ].count.load() ),
+                          // int( anchoredParticles[ p ].particles.size() ) );
+        return count;
+    }
+
+    void Add( const mat4 pTransform ) {
+        // add it to the list... mutex will be locked at this time
+        count++;
+        particles.push_back( make_shared< const mat4 >( pTransform ) );
+    }
+
+    mat4 Get( int idx ) {
+        // get index i from the list... we need to avoid seg faulting, so return a dummy value if we don't have it
+        if ( count == 0 || idx >= count ) {
+            return mat4( 1.0f );
+        } else {
+            mat4 temp = mat4( *particles[ idx ].get() );
+            return temp;
+        }
+    }
 };
 
 // the list of particles which have been anchored
@@ -118,13 +148,13 @@ int numAnchored = 0;
 vector< vec4 > particlePool;
 
 // get a point on the boundary
-void respawnParticle ( vec4 p ) {
+void respawnParticle ( vec4 &p ) {
     thread_local rngi pick( 0, 2 );
     thread_local rng pick2( 0.0f, 1.0f );
 
-    bool face = ( pick2() < 0.5f );
+    thread_local bool face = ( pick2() < 0.5f );
     constexpr float margin = 10.0f;
-    p.x = glm::mix( minExtents.x - margin, maxExtents.z + margin, pick2() );
+    p.x = glm::mix( minExtents.x - margin, maxExtents.x + margin, pick2() );
     p.y = glm::mix( minExtents.y - margin, maxExtents.y + margin, pick2() );
     p.z = glm::mix( minExtents.z - margin, maxExtents.z + margin, pick2() );
 
@@ -147,18 +177,12 @@ void respawnParticle ( vec4 p ) {
     p.w = 100.0f; // I think this is a nice mechanism - it can wander, but in a bounded way - when it hits zero, respawn
 }
 
-void anchorParticle ( vec3 p, const mat4 &pTransform ) {
+void anchorParticle ( const ivec3 iP, const mat4 &pTransform ) {
     // we need to anchor this particle... but first, lock the mutex so only one thread can do this at once
     lock_guard< mutex > lock( anchoredParticlesGuard ); // mutex object entering scope locks... declaration is blocking 
 
-    // precompute integer rounded coordinates
-    const ivec3 iP = ivec3( p );
-
     // push the constructed mat4 onto the list
-    anchoredParticles[ iP ].particles.push_back( make_unique< const mat4 >( pTransform ) );
-
-    // now that it's safe to access, show it as available for other threads
-    anchoredParticles[ iP ].count++; // "++" operator does the atomic increment
+    anchoredParticles[ iP ].Add( pTransform );
 
     // tracking how many particles have been added, and the min and max extents
     minExtents = glm::min( iP, minExtents );
@@ -169,11 +193,13 @@ void anchorParticle ( vec3 p, const mat4 &pTransform ) {
 }
 
 // this is the update, operating on a particular particle
-const float temperature = 3.0f;
-thread_local rng jitter( -temperature, temperature );
+const float temperature = 3.0f; // make this a sim parameter, eventually
+thread_local rngN jitter( 0.0f, 0.1f );
 void particleUpdate ( uintmax_t jobIndex ) {
-    uintmax_t idx = jobIndex % particlePool.size();
-    vec4 &particle =  particlePool[ idx ];
+    thread_local const uintmax_t idx = jobIndex % particlePool.size();
+    thread_local vec4 &particle = particlePool[ idx ];
+
+    // cout << "Starting Update at " << to_string( particle ) << endl;
 
     // oob decrement + respawn logic
     if ( glm::any( glm::lessThanEqual( particle.xyz(), vec3( minExtents - ivec3( 10 ) ) ) ) ||
@@ -186,21 +212,72 @@ void particleUpdate ( uintmax_t jobIndex ) {
         }
     }
 
-    // move the particle slightly -> this should be parameterized with "TEMPERATURE"
-    particle.x += jitter();
-    particle.y += jitter();
-    particle.z += jitter();
+    // move the particle slightly
+    particle.x += temperature * jitter();
+    particle.y += temperature * jitter();
+    particle.z += temperature * jitter();
 
     // are we going to bond to something? is there a nearby anchored particle?
+    // first, let's look at all the particles in the local neighborhood...
+    thread_local std::vector< mat4 > nearbyPoints; // eventually this should be a static scratch pool per thread to avoid allocations
+    for ( thread_local int x = -1; x <= 1; x++ )
+    for ( thread_local int y = -1; y <= 1; y++ )
+    for ( thread_local int z = -1; z <= 1; z++ ) {
+        thread_local const ivec3 loc = ivec3( particle.xyz() ) + ivec3( x, y, z );
+        thread_local gridCell &gc = anchoredParticles[ loc ];
+        thread_local const int count = gc.GetCount();
+        if ( count > 0 ) {
+            for ( thread_local int i = 0; i < count; i++ ) {
+                cout << "attempting read at " << to_string( loc ) << " " << i << " / " << count << endl;
+                thread_local mat4 mat = gc.Get( i );
+                nearbyPoints.push_back( mat );
+            }
+        }
+    }
 
-    // get the transform of the particle that you want to bond to...
+    // we need to find out which, if any, of these points can be anchored to...
+    if ( nearbyPoints.size() != 0 ) {
+        // constants for shortening calculations of points + vector offsets
+        constexpr vec4 p0 = vec4( 0.0f, 0.0f, 0.0f, 1.0f );
+        constexpr vec4 v0 = vec4( 0.0f, 0.0f, 0.0f, 0.0f );
 
-    // find the closest bonding location...
+        // cout << "I have Neighbors!!" << endl;
 
-    // and add a particle with the indicated transform
-        // right now we will use only position, but orientation is important for crystal lattice
-    const mat4 pTransform = glm::translate( mat4( 1.0f ), particle.xyz() );
-    anchorParticle( particle.xyz(), pTransform );
+        // finding the closest point... we know we have 1, so we start with that
+        thread_local mat4 closestPointTransform = nearbyPoints[ 0 ];
+        thread_local float closestPointDistance = glm::distance(
+            particle.xyz(), ( closestPointTransform * p0 ).xyz()
+        );
+
+        // if we have more than one point to consider, compare them
+        for ( thread_local int i = 1; i < nearbyPoints.size(); i++ ) {
+            thread_local const float d = glm::distance(
+                particle.xyz(), ( nearbyPoints[ i ] * p0 ).xyz()
+            );
+            if ( d < closestPointDistance ) {
+                closestPointDistance = d;
+                closestPointTransform = nearbyPoints[ i ];
+            }
+        }
+
+        // some additional bonding criteria...?
+        if ( true ) { // close enough... random hash... etc
+            // figure out which of bonding sites you want to bond to... probably the closest one of them
+
+            // the mat4 tells us the orientation and the position of the point
+
+            // and add a particle with the indicated transform
+                // right now we will use only position, but orientation is important for crystal lattice
+            thread_local const mat4 pTransform = glm::translate( mat4( 1.0f ), particle.xyz() );
+
+            // mutex is locked, only during add... math happens outside, nice
+            anchorParticle( ivec3( particle.xyz() ), pTransform );
+
+            // since we bound to a surface, the point location is no longer valid and should not proceed
+            respawnParticle( particle ); // we will now respawn somewhere on the sim boundary
+        }
+    }
+
 }
 
 //=================================================================================================
@@ -208,7 +285,7 @@ void particleUpdate ( uintmax_t jobIndex ) {
 atomic_uintmax_t jobCounter;
 
 // threadpool setup
-constexpr int NUM_THREADS = 69;
+constexpr int NUM_THREADS = 16;
 bool threadFences[ NUM_THREADS ];
 bool threadKill = false;
 std::thread threads[ NUM_THREADS ];
@@ -216,17 +293,156 @@ std::thread threads[ NUM_THREADS ];
 #include "reporter.h" // proc filesystem reading
 //=================================================================================================
 int main () {
-    // an initial point in the model, so we have something to bond to
-    anchorParticle( vec3( 0.0f ), mat4( 1.0f ) );
+    // pump initial proc data
+    updateProcData();
+    updateProcData();
+    
+    cout << "Spawning Reporter Thread.......... ";
+	std::thread reporterThread = std::thread(
+        [&] () { // this is the reporter thread
+			auto tStart = high_resolution_clock::now();
+            cout << "Done." << endl;
 
-    // also, we need to make sure there are particles to update...
-    particlePool.resize( 1'000'000 );
+            size_t update = 0;
 
-    // set all the thread fences "true"
-    for ( auto& fence : threadFences )
-        fence = true;
+            int window_1_left = 10;
+            int window_1_top = 10;
+            int window_1_width = 40;
+            int window_1_height = 20;
 
+            bool checked[3] = {false, false, false};
+            float slider = 50;
+
+            auto window_1 = Window({
+                .inner = Container::Vertical({
+                    // Checkbox("Check me", &checked[0]),
+                    // Checkbox("Check me", &checked[1]),
+                    // Checkbox("Check me", &checked[2]),
+                    // Slider("Slider", &slider, 0.f, 100.f),
+                    Renderer( [&] ( bool focused ) {
+                        auto c1 = color( Color::RGB( 255, 34, 0 ) );
+                        auto c2 = color( Color::RGB( 255, 255, 34 ) );
+                        return vbox({
+                            hbox({ text( "Job Counter:         " ) | c1, text( std::to_string( jobCounter.load() ) ) | c2 }),
+                            hbox({ text( "Anchored Particles:  " ) | c1, text( std::to_string( numAnchored ) ) | c2 }),
+                            hbox({ text( "Extents:" ) | c1 }),
+                            hbox({ text( " x:  " ) | c1, text( to_string( minExtents.x ) + " " ) | c2, text( to_string( maxExtents.x ) ) | c2 }),
+                            hbox({ text( " y:  " ) | c1, text( to_string( minExtents.y ) + " " ) | c2, text( to_string( maxExtents.y ) ) | c2 }),
+                            hbox({ text( " z:  " ) | c1, text( to_string( minExtents.z ) + " " ) | c2, text( to_string( maxExtents.z ) ) | c2 }),
+                        });
+                    }),
+                }),
+                .title = "Control Window",
+                .left = &window_1_left,
+                .top = &window_1_top,
+                .width = &window_1_width,
+                .height = &window_1_height,
+            });
+
+            auto window_2 = Window({
+                .inner = Renderer([] (bool focused) {
+                    Elements temp, accum;
+                    for ( int j = 0; j < 6; j++ ) {
+                        for ( int i = 0; i < 12; i++ ) {
+                            int idx = i + 6 * j;
+                            float intensity = usagePercentage[ idx ];
+                            temp.push_back( text( " " ) | bgcolor( Color::RGB( 255 * sqrt( intensity ), 128 * intensity, 0 ) ) );
+                        }
+                        accum.push_back( hbox( temp ) );
+                        temp.resize( 0 );
+                    }
+                    return vbox( accum );
+                }),
+                .title = "CPU Activity",
+                .width = 14,
+                .height = 8,
+            });
+
+            auto window_container = Container::Stacked({
+              window_1,
+              window_2,
+            });
+
+            auto screen = ScreenInteractive::FixedSize( 80, 30 );
+            auto ftxDAG = CatchEvent( window_container, [&]( Event event ) {
+                if ( event == Event::Character('q') ) {
+                    screen.ExitLoopClosure()();
+                    return true;
+                }
+                return false;
+            });
+
+            // an initial point in the model, so we have something to bond to
+            // cout << "Anchoring Initial Seed Particles.. ";
+            rng pR( -2.0f, 2.0f );
+            for ( int i = 0; i < 10; i++ ) {
+                vec3 p = 10.0f * vec3( pR(), pR(), pR() );
+                anchorParticle( p, glm::translate( glm::rotate( mat4( 1.0f ), pR(), normalize( vec3( pR(), pR(), pR() ) ) ), p ) );
+            }
+            // cout << "Done." << endl;
+
+            int detectedPointCount = 0;
+            for ( auto& [k,v] : anchoredParticles )
+                for ( auto& p : v.particles ) {
+                    detectedPointCount++;
+                    cout << "found: " << to_string( *p.get() ) << " at " << to_string( k ) << endl;
+                    cout << "confirm: " << to_string( *p.get() * vec4( 0.0f, 0.0f, 0.0f, 1.0f ) ) << endl;
+                }
+            // cout << "Confirm Contents: map has " << detectedPointCount << " elements" << endl;
+
+            // we need to make sure there are particles to update...
+            // cout << "Spawning Particles................ ";
+            particlePool.resize( 100000 );
+            for ( auto& p : particlePool ) {
+                respawnParticle( p );
+            }
+            // cout << "Done." << endl;
+
+            sleep_for( 100ms );
+
+            // set all the thread fences "true"
+            // cout << "Enable Worker Threads............. ";
+            for ( auto& fence : threadFences )
+                fence = true;
+            // cout << "Done." << endl;
+
+            // "main loop"
+            // cout << "Entering Main Loop..." << endl;
+            // for ( int i = 0; i < 15; i++ ) cout << endl;
+            // ftxui::Loop loop( &screen, ftxDAG );
+            // bool timeout = ( float( std::chrono::duration< float, std::milli >( high_resolution_clock::now() - tStart ).count() ) > 1000.0f );
+            // while (!loop.HasQuitted() && !timeout ) {
+               // screen.RequestAnimationFrame();
+               // loop.RunOnce();
+               // sleep_for( 100ms );
+            // }
+
+           // sleep_for( 10000ms );
+
+            // signal that all threads should exit
+            threadKill = true;
+
+            // save the data out, or whatever
+
+            return;
+        }
+	);
+
+    // touch some chunk of the hashmap to preallocate?
+    // cout << "hashmap preallocate... ";
+    // mat4 temp;
+    // for ( int x = -10; x < 10; x++ ) {
+    // for ( int y = -10; y < 10; y++ ) {
+    // for ( int z = -10; z < 10; z++ ) {
+        // temp = readParticle( ivec3( x, y, z ), 0 );
+    // }}}
+    // ( void ) temp;
+    // cout << "finished." << endl;
+
+    sleep_for( 100ms );
+     
     // "service" thread, to keep the proc data updated
+    cout << "Spawning Proc Updater Thread...... ";
     std::thread procUpdaterThread = std::thread(
         [&]() {
             while ( !threadKill ) {    
@@ -235,102 +451,17 @@ int main () {
             }
         }
     );
+    cout << "Done." << endl;
+
+    sleep_for( 100ms );
 
     // dispatching threads:
+    cout << "Dispatching Worker Threads (" << NUM_THREADS << ")... ";
 	for ( int id = 0; id < NUM_THREADS; id++ ) {
-        const int myThreadID = id;
-		threads[ myThreadID ] = ( myThreadID == 0 ) ? std::thread(
-		   [&] () { // this is the reporter thread
-				auto tStart = std::chrono::high_resolution_clock::now();
-                size_t update = 0;
-
-                int window_1_left = 20;
-                int window_1_top = 10;
-                int window_1_width = 40;
-                int window_1_height = 20;
-
-                bool checked[3] = {false, false, false};
-                float slider = 50;
-
-                auto window_1 = Window({
-                    .inner = Container::Vertical({
-                        // Checkbox("Check me", &checked[0]),
-                        // Checkbox("Check me", &checked[1]),
-                        // Checkbox("Check me", &checked[2]),
-                        // Slider("Slider", &slider, 0.f, 100.f),
-                        Renderer( [&] ( bool focused ) {
-                            auto c1 = color( Color::RGB( 255, 34, 0 ) );
-                            auto c2 = color( Color::RGB( 255, 255, 34 ) );
-                            return vbox({
-                                hbox({ text( "Job Counter:         " ) | c1, text( std::to_string( jobCounter.load() ) ) | c2 }),
-                                hbox({ text( "Anchored Particles:  " ) | c1, text( std::to_string( numAnchored ) ) | c2 }),
-                                hbox({ text( "Extents:" ) | c1 }),
-                                hbox({ text( " x:  " ) | c1, text( to_string( minExtents.x ) + " " ) | c2, text( to_string( maxExtents.x ) ) | c2 }),
-                                hbox({ text( " y:  " ) | c1, text( to_string( minExtents.y ) + " " ) | c2, text( to_string( maxExtents.y ) ) | c2 }),
-                                hbox({ text( " z:  " ) | c1, text( to_string( minExtents.z ) + " " ) | c2, text( to_string( maxExtents.z ) ) | c2 }),
-                            });
-                        }),
-                    }),
-                    .title = "Control Window",
-                    .left = &window_1_left,
-                    .top = &window_1_top,
-                    .width = &window_1_width,
-                    .height = &window_1_height,
-                });
-
-                auto window_2 = Window({
-                    .inner = Renderer([] (bool focused) {
-                        Elements temp, accum;
-                        for ( int j = 0; j < 6; j++ ) {
-                            for ( int i = 0; i < 12; i++ ) {
-                                int idx = i + 6 * j;
-                                temp.push_back( text( " " ) | bgcolor( Color::RGB( 0, 255 * usagePercentage[ idx ], 0 ) ) );
-                            }
-                            accum.push_back( hbox( temp ) );
-                            temp.resize( 0 );
-                        }
-                        return vbox( accum );
-                    }),
-                    .title = "CPU Activity",
-                    .width = 14,
-                    .height = 8,
-                });
-
-                auto window_container = Container::Stacked({
-                  window_1,
-                  window_2,
-                });
-
-                auto screen = ScreenInteractive::TerminalOutput();
-                auto ftxDAG = CatchEvent( window_container, [&]( Event event ) {
-                    if ( event == Event::Character('q') ) {
-                        screen.ExitLoopClosure()();
-                        return true;
-                    }
-                    return false;
-                });
-
-                ftxui::Loop loop( &screen, ftxDAG );
-
-                // "main loop"
-                while (!loop.HasQuitted()) {
-                   screen.RequestAnimationFrame();
-                   loop.RunOnce();
-
-                   sleep_for( 100ms );
-                }
-
-                // signal that all threads should exit
-                threadKill = true;
-
-                // save the data out, or whatever
-
-                return;
-            }
-		) : std::thread(
+		threads[ id ] = std::thread(
 			[&] () {
                 // this is one of the worker threads...
-                thread_local const int myThreadID = id;
+                thread_local int myThreadID = id;
                 while ( !threadKill ) {
                     // check my fence...
                     if ( threadFences[ myThreadID ] ) { // if I'm operating, hit the jobCounter
@@ -345,13 +476,19 @@ int main () {
 			}
 		);
 	}
+	cout << "Done." << endl;
 
+    
     // join all worker threads back to main
 	for ( auto& thread : threads )
 		thread.join();
 
     // join the proc updater thread back to main
     procUpdaterThread.join();
+
+    // join the reporter thread, now that everything else has terminated
+    reporterThread.join();
+    cout << "Terminating....................... Done." << endl;
 
 	return 0;
 }
