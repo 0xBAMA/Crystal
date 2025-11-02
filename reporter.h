@@ -72,7 +72,7 @@ void updateProcData () {
             if ( dTotal == 0 ) dTotal = 1;  // Avoid division by 0
 
             // store CPU usage
-            usagePercentage[ i ] = 0.6f * usagePercentage[ i ] + 0.4f * ( dUsed / dTotal );
+            usagePercentage[ i ] = 0.9f * usagePercentage[ i ] + 0.1f * ( dUsed / dTotal );
             // cout << "usage: " << i << " " << usagePercentage[ i ] << endl;
         }
 
