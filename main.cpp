@@ -204,7 +204,6 @@ void anchorParticle ( const ivec3 iP, const mat4 &pTransform ) {
     maxExtents = glm::max( iP, maxExtents );
     numAnchored++;
 
-    cout << to_string( iP ) << endl;
     // and the mutex leaves scope, unblocking for the next write access
 }
 
@@ -217,8 +216,6 @@ vec4 particlePool[ NUM_PARTICLES ];
 void particleUpdate ( uintmax_t jobIndex ) {
     thread_local const uintmax_t idx = jobIndex % NUM_PARTICLES;
     vec4 &particle = particlePool[ idx ];
-
-    // cout << "Starting Update at " << jobIndex << " " << to_string( particle ) << endl;
 
     // oob decrement + respawn logic
     if ( glm::any( glm::lessThanEqual( particle.xyz(), vec3( minExtents - ivec3( 10 ) ) ) ) ||
@@ -256,7 +253,6 @@ void particleUpdate ( uintmax_t jobIndex ) {
         if ( solutionFound ) {
             const int count = anchoredParticles[ loc ].GetCount();
             for ( int i = 0; i < count; i++ ) {
-                // cout << "attempting read at " << to_string( loc ) << " " << i << " / " << count << endl;
                 const mat4 mat = anchoredParticles[ loc ].Get( i );
                 nearbyPoints.push_back( make_shared< const mat4 >( mat ) );
             }
@@ -288,7 +284,6 @@ void particleUpdate ( uintmax_t jobIndex ) {
         // some additional bonding criteria...?
         if ( closestPointDistance < 1.0f ) { // close enough... random hash... etc
             // figure out which of bonding sites you want to bond to... probably the closest one of them
-            // cout << "bonding at " << to_string( particle.xyz() ) << endl;
 
             // the mat4 tells us the orientation and the position of the point
 
@@ -310,7 +305,7 @@ void particleUpdate ( uintmax_t jobIndex ) {
 atomic_uintmax_t jobCounter { 0 };
 
 // threadpool setup
-constexpr int NUM_THREADS = 1;
+constexpr int NUM_THREADS = 16;
 bool threadFences[ NUM_THREADS ];
 bool threadKill;
 std::thread threads[ NUM_THREADS ];
@@ -325,10 +320,8 @@ int main () {
     // setting initial program state
     threadKill = false;
     // set all the thread fences "true"
-    // cout << "Enable Worker Threads............. ";
     for ( auto& fence : threadFences )
         fence = true;
-    // cout << "Done." << endl;
     
     cout << "Spawning Reporter Thread.......... ";
 	std::thread reporterThread = std::thread(
@@ -451,7 +444,7 @@ int main () {
 
            // sleep_for( 10000ms );
 
-            // signal that all threads should exit
+            // signal that all threads should exit and wait for them to do so
             threadKill = true;
             sleep_for( 100ms );
 
@@ -469,15 +462,11 @@ int main () {
                 maxSize = max( maxSize, v.particles.size() );
                 for ( auto& p : v.particles ) {
                     vec2 pT = ( p * p0 ).xy();
-                    // cout << to_string( pT ) << endl;
                     points.push_back( pT );
                 }
             }
 
-            cout << "max bin is " << maxSize << endl;;
-
-
-            // anchored particles
+            // information about anchored particles
             int binCountsA[ 1000 * 1000 ];
             int maxCountA = 0;
             int nonzeroBinsA = 0;
@@ -493,63 +482,19 @@ int main () {
                 maxCountA = max( maxCountA, binCountsA[ loc.x + 1000 * loc.y ] );
             }
 
-            // free particles
-            // int binCountsF[ 1000 * 1000 ];
-            // int maxCountF = 0;
-            // for ( auto& b : binCountsF ) { b = 0; }
-            // for ( auto& p : particlePool ) {
-                // ivec2 loc = ivec2(
-                    // int( remap( p.x, minExtents.x, maxExtents.x, 0.0f, 1000.0f ) ),
-                    // int( remap( p.y, minExtents.y, maxExtents.y, 0.0f, 1000.0f ) )
-                // );
-                // binCountsF[ loc.x + 1000 * loc.y ]++;
-                // maxCountF = max( maxCountF, binCountsF[ loc.x + 1000 * loc.y ] );
-            // }
-
-            // std::ofstream out( "testCrystal.txt" );
-            // for ( int y = 0; y < 1000; y++ ) {
-                // for ( int x = 0; x < 1000; x++ ) {
-                    // out << binCountsA[ x + 1000 * y ];
-                // }
-                // out << endl;
-            // }
-            // out << endl << endl << endl;
-            // for ( int y = 0; y < 1000; y++ ) {
-                // for ( int x = 0; x < 1000; x++ ) {
-                    // out << binCountsF[ x + 1000 * y ];
-                // }
-                // out << endl;
-            // }
-            // out.flush();
-// 
-            // now preparing an image...
-
             // write out the image
             std::vector< uint8_t > data;
             for ( auto& p : binCountsA ) {
                 for ( int i = 0; i < 3; i++ )
                     // data.push_back( 255 * glm::pow( float( p ) / float( maxCountA ), 0.2f ) );
-                    data.push_back( 255 * int( p != 0 ) ), nonzeroBinsA += ( ( p != 0 ) ? 1 : 0 );
+                    data.push_back( 255 * int( p != 0 ) );
                 data.push_back( 255 );
             }
             stbi_write_png( string( "test.png" ).c_str(), 1000, 1000, 4, &data[ 0 ], 4000 );
-            cout << "found " << nonzeroBinsA << " bins" << endl;
-            
 
             return;
         }
 	);
-
-    // touch some chunk of the hashmap to preallocate?
-    // cout << "hashmap preallocate... ";
-    mat4 temp;
-    for ( int x = -20; x < 20; x++ ) {
-    for ( int y = -20; y < 20; y++ ) {
-    for ( int z = -20; z < 20; z++ ) {
-        temp = anchoredParticles[ ivec3( x, y, z ) ].Get( 0 );
-    }}}
-    ( void ) temp;
-    // cout << "finished." << endl;
 
     // "service" thread, to keep the proc data updated
     cout << "Spawning Proc Updater Thread...... ";
@@ -570,27 +515,23 @@ int main () {
 			[&] () {
                 // this is one of the worker threads...
                 thread_local int myThreadID = id;
-                // cout << "thread " << myThreadID << " init" << endl;
                 sleep_for( 100ms );
                 while ( !threadKill ) {
                     // check my fence...
                     if ( threadFences[ myThreadID ] ) { // if I'm operating, hit the jobCounter
                         // do a particle update based on the number returned
-                        // cout << "thread " << myThreadID << " attempting update" << endl;
                         particleUpdate( jobCounter.fetch_add( 1 ) );
                     } else {
                         // if I'm not, sleep 1ms
                         std::this_thread::sleep_for( 1ms );
                     }
                 }
-                // cout << "thread " << myThreadID << " leaving scope" << endl;
                 return;
 			}
 		);
 	}
 	cout << "Done." << endl;
 
-    
     // join all worker threads back to main
 	for ( auto& thread : threads )
 		thread.join();
