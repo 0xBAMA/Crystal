@@ -7,7 +7,7 @@
 #include <iostream>
 #include <mutex>
 
-constexpr size_t HASH_SIZE_DEFAULT = 1031;      // A prime number as hash size gives a better distribution of values in buckets
+constexpr size_t HASH_SIZE_DEFAULT = 12207031;      // A prime number as hash size gives a better distribution of values in buckets
 namespace CTSL // Concurrent Thread Safe Library
 {
 // The class representing the hash map.
