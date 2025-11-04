@@ -125,41 +125,41 @@ float remap ( float in, float aL, float aH, float bL, float bH ) {
 }
 
 struct gridCell {
-    // keeping "count" as an atomic, separate from .size()...
-        // this means we can make sure that the mat4 is fully constructed before showing as available to other threads
-    std::atomic< std::int32_t > count = { 0 };
     vector< mat4 > particles;
+    std::shared_mutex mutex;
 
     gridCell() {
-        count.store( 0 );
         particles.resize( 0 );
+        particles.reserve( 16 );
     }
 
-    int32_t GetCount () const  {
-        // this should be able to rely on the count...
-        return count;
-        // return std::min( int( count ), int( particles.size() ) );
+    size_t GetCount () {
+        // this is the non-exclusive read mutex
+        std::shared_lock lock( mutex );
+        return particles.size();
     }
 
-    void Add( const mat4 pTransform ) {
-        // add it to the list... mutex will be locked at this time
+    void Add( const mat4 &pTransform ) {
+        // add it to the list... exclusive mutex is locked at this time
+        std::unique_lock lock( mutex );
         particles.push_back( pTransform );
-        count++;
     }
 
-    mat4 Get( int idx ) const {
+    mat4 Get( const int &idx ) {
+        // locking the non-exclusive read mutex
+        std::shared_lock lock( mutex );
+
         // get index i from the list... we need to avoid seg faulting, so return a dummy value if we don't have it
-        if ( count == 0 || idx >= count ) {
-            return mat4( 1.0f );
-        } else {
+        // if ( idx >= particles.size() ) {
+            // return mat4( 1.0f );
+        // } else {
             return particles[ idx ];
-        }
+        // }
     }
 };
 
 // the list of particles which have been anchored
-unordered_map< ivec3, gridCell > anchoredParticles;
-mutex anchoredParticlesGuard;
+CTSL::HashMap< ivec3, std::shared_ptr< gridCell > > anchoredParticles;
 
 // maintaining stats on the above container
 ivec3 minExtents = ivec3( -20 );
@@ -195,11 +195,10 @@ void respawnParticle ( vec4 &p ) {
 }
 
 void anchorParticle ( const ivec3 iP, const mat4 &pTransform ) {
-    // we need to anchor this particle... but first, lock the mutex so only one thread can do this at once
-    lock_guard< mutex > lock( anchoredParticlesGuard ); // mutex object entering scope locks... declaration is blocking 
+    // we need to anchor this particle...
 
     // push the constructed mat4 onto the list
-    anchoredParticles[ iP ].Add( pTransform );
+    // anchoredParticles[ iP ].Add( pTransform );
 
     // tracking how many particles have been added, and the min and max extents
     minExtents = glm::min( iP, minExtents );
@@ -212,6 +211,7 @@ void anchorParticle ( const ivec3 iP, const mat4 &pTransform ) {
 // this is the update, operating on a particular particle
 const float temperature = 1.0f; // make this a sim parameter, eventually
 thread_local rngN jitter( 0.0f, 0.1f );
+
 // the particles are the diffusion-limit mechanism
 constexpr int32_t NUM_PARTICLES = 10'000;
 vec4 particlePool[ NUM_PARTICLES ];
@@ -244,21 +244,19 @@ void particleUpdate ( uintmax_t jobIndex ) {
     for ( int x : s )
     for ( int y : s )
     for ( int z : s ) {
-        if ( x == 0 && y == 0 && z == 0 ) continue;
-        
+        // if ( x == 0 && y == 0 && z == 0 ) continue;
         const ivec3 loc = ivec3( particle.xyz() ) + ivec3( x, y, z );
-        bool solutionFound = false;
-        {   // I had hoped to avoid a lock on the read side, but oh well...
-            lock_guard< mutex > lock( anchoredParticlesGuard );
-            solutionFound = anchoredParticles.contains( loc );
-        }
-        if ( solutionFound ) {
-            const int count = anchoredParticles[ loc ].GetCount();
+        std::shared_ptr< gridCell > gcp;
+
+        // "find()" will also return the pointer to the container contents
+        if ( anchoredParticles.find( loc, gcp ) ) {
+            // we have located a cell which contains particles...
+            const size_t count = gcp->GetCount();
             for ( int i = 0; i < count; i++ ) {
-                const mat4 mat = anchoredParticles[ loc ].Get( i );
+                const mat4 mat = gcp->Get( i );
                 nearbyPoints.push_back( make_shared< const mat4 >( mat ) );
             }
-        }
+        } // else we did not find any contents here
     }
 
     // we need to find out which, if any, of these points can be anchored to...
