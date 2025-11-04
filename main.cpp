@@ -545,17 +545,5 @@ int main () {
     reporterThread.join();
     cout << "Terminating....................... Done." << endl;
 
-    CTSL::HashMap< ivec3, int > stringMap;
-    stringMap.insert( ivec3( 1 ), 200 );
-    stringMap.insert( ivec3( 2 ), 670 );
-    stringMap.insert( ivec3( 3 ), 203 );
-
-    int value;
-    cout << ( stringMap.find( ivec3( 1 ), value ) ? "true" : "false" ) << endl;
-    cout << ( stringMap.find( ivec3( 2 ), value ) ? "true" : "false" ) << endl;
-    cout << ( stringMap.find( ivec3( 3 ), value ) ? "true" : "false" ) << endl;
-    cout << ( stringMap.find( ivec3( 4 ), value ) ? "true" : "false" ) << endl;
-
-
 	return 0;
 }
