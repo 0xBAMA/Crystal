@@ -456,41 +456,41 @@ int main () {
         // orthographic projection, just dropping the z term.
 
             // create a linear buffer of all the point locations in minimum representation
-            size_t maxSize = 0;
-            vector< vec2 > points;
-            for ( auto& [k,v] : anchoredParticles ) {
-                maxSize = max( maxSize, v.particles.size() );
-                for ( auto& p : v.particles ) {
-                    vec2 pT = ( p * p0 ).xy();
-                    points.push_back( pT );
-                }
-            }
+            // size_t maxSize = 0;
+            // vector< vec2 > points;
+            // for ( auto& [k,v] : anchoredParticles ) {
+                // maxSize = max( maxSize, v.particles.size() );
+                // for ( auto& p : v.particles ) {
+                    // vec2 pT = ( p * p0 ).xy();
+                    // points.push_back( pT );
+                // }
+            // }
 
             // information about anchored particles
-            int binCountsA[ 1000 * 1000 ];
-            int maxCountA = 0;
-            int nonzeroBinsA = 0;
-            for ( auto& b : binCountsA ) { b = 0; }
-            for ( auto& p : points ) {
-                ivec2 loc = ivec2(
+            // int binCountsA[ 1000 * 1000 ];
+            // int maxCountA = 0;
+            // int nonzeroBinsA = 0;
+            // for ( auto& b : binCountsA ) { b = 0; }
+            // for ( auto& p : points ) {
+                // ivec2 loc = ivec2(
                     // clamp( int( remap( p.x, minExtents.x, maxExtents.x, 0.0f, 1000.0f ) ), 0, 999 ),
                     // clamp( int( remap( p.y, minExtents.y, maxExtents.y, 0.0f, 1000.0f ) ), 0, 999 )
-                    int( remap( p.x, minExtents.x, maxExtents.x, 0.0f, 1000.0f ) ),
-                    int( remap( p.y, minExtents.y, maxExtents.y, 0.0f, 1000.0f ) )
-                );
-                binCountsA[ loc.x + 1000 * loc.y ]++;
-                maxCountA = max( maxCountA, binCountsA[ loc.x + 1000 * loc.y ] );
-            }
-
+                    // int( remap( p.x, minExtents.x, maxExtents.x, 0.0f, 1000.0f ) ),
+                    // int( remap( p.y, minExtents.y, maxExtents.y, 0.0f, 1000.0f ) )
+                // );
+                // binCountsA[ loc.x + 1000 * loc.y ]++;
+                // maxCountA = max( maxCountA, binCountsA[ loc.x + 1000 * loc.y ] );
+            // }
+// 
             // write out the image
-            std::vector< uint8_t > data;
-            for ( auto& p : binCountsA ) {
-                for ( int i = 0; i < 3; i++ )
+            // std::vector< uint8_t > data;
+            // for ( auto& p : binCountsA ) {
+                // for ( int i = 0; i < 3; i++ )
                     // data.push_back( 255 * glm::pow( float( p ) / float( maxCountA ), 0.2f ) );
-                    data.push_back( 255 * int( p != 0 ) );
-                data.push_back( 255 );
-            }
-            stbi_write_png( string( "test.png" ).c_str(), 1000, 1000, 4, &data[ 0 ], 4000 );
+                    // data.push_back( 255 * int( p != 0 ) );
+                // data.push_back( 255 );
+            // }
+            // stbi_write_png( string( "test.png" ).c_str(), 1000, 1000, 4, &data[ 0 ], 4000 );
 
             return;
         }
