@@ -107,6 +107,8 @@ namespace std {
 #include "stb/stb_image_write.h"	// https://github.com/nothings/stb/blob/master/stb_image_write.h
 #include "stb/stb_image_resize.h"	// https://github.com/nothings/stb/blob/master/stb_image_resize.h
 //=================================================================================================
+#include "hashMap/inc/HashMap.h"
+//=================================================================================================
 
 // going to use this as a threshold for a kind of "bonding affinity"... may need more detail here than 1 degree of freedom
 // float transformSimilarity ( const particle_t &a, const particle_t &b ) const {
@@ -542,6 +544,18 @@ int main () {
     // join the reporter thread, now that everything else has terminated
     reporterThread.join();
     cout << "Terminating....................... Done." << endl;
+
+    CTSL::HashMap< ivec3, int > stringMap;
+    stringMap.insert( ivec3( 1 ), 200 );
+    stringMap.insert( ivec3( 2 ), 670 );
+    stringMap.insert( ivec3( 3 ), 203 );
+
+    int value;
+    cout << ( stringMap.find( ivec3( 1 ), value ) ? "true" : "false" ) << endl;
+    cout << ( stringMap.find( ivec3( 2 ), value ) ? "true" : "false" ) << endl;
+    cout << ( stringMap.find( ivec3( 3 ), value ) ? "true" : "false" ) << endl;
+    cout << ( stringMap.find( ivec3( 4 ), value ) ? "true" : "false" ) << endl;
+
 
 	return 0;
 }
