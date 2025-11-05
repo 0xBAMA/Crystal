@@ -442,55 +442,9 @@ int main () {
                // }
             }
 
-           // sleep_for( 10000ms );
-
             // signal that all threads should exit and wait for them to do so
             threadKill = true;
             sleep_for( 100ms );
-
-            // save the data out, bake out a preview or whatever for now...
-
-        // I think I want to do basic pixel binning first... get an idea of counts...
-        // then on a second pass, we inform an initial scale factor based on that max total
-        // and an additional dimming term based on the distance to a view plane, kind of idea,
-        // orthographic projection, just dropping the z term.
-
-            // create a linear buffer of all the point locations in minimum representation
-            // size_t maxSize = 0;
-            // vector< vec2 > points;
-            // for ( auto& [k,v] : anchoredParticles ) {
-                // maxSize = max( maxSize, v.particles.size() );
-                // for ( auto& p : v.particles ) {
-                    // vec2 pT = ( p * p0 ).xy();
-                    // points.push_back( pT );
-                // }
-            // }
-
-            // information about anchored particles
-            // int binCountsA[ 1000 * 1000 ];
-            // int maxCountA = 0;
-            // int nonzeroBinsA = 0;
-            // for ( auto& b : binCountsA ) { b = 0; }
-            // for ( auto& p : points ) {
-                // ivec2 loc = ivec2(
-                    // clamp( int( remap( p.x, minExtents.x, maxExtents.x, 0.0f, 1000.0f ) ), 0, 999 ),
-                    // clamp( int( remap( p.y, minExtents.y, maxExtents.y, 0.0f, 1000.0f ) ), 0, 999 )
-                    // int( remap( p.x, minExtents.x, maxExtents.x, 0.0f, 1000.0f ) ),
-                    // int( remap( p.y, minExtents.y, maxExtents.y, 0.0f, 1000.0f ) )
-                // );
-                // binCountsA[ loc.x + 1000 * loc.y ]++;
-                // maxCountA = max( maxCountA, binCountsA[ loc.x + 1000 * loc.y ] );
-            // }
-// 
-            // write out the image
-            // std::vector< uint8_t > data;
-            // for ( auto& p : binCountsA ) {
-                // for ( int i = 0; i < 3; i++ )
-                    // data.push_back( 255 * glm::pow( float( p ) / float( maxCountA ), 0.2f ) );
-                    // data.push_back( 255 * int( p != 0 ) );
-                // data.push_back( 255 );
-            // }
-            // stbi_write_png( string( "test.png" ).c_str(), 1000, 1000, 4, &data[ 0 ], 4000 );
 
             return;
         }
@@ -542,6 +496,64 @@ int main () {
     // join the reporter thread, now that everything else has terminated
     reporterThread.join();
     cout << "Terminating....................... Done." << endl;
+    cout << "Saw " << uniqueKeys << " additions to the data structure" << endl;
+
+    // save the data out, bake out a preview or whatever for now...
+
+    // I think I want to do basic pixel binning first... get an idea of counts...
+    // then on a second pass, we inform an initial scale factor based on that max total
+    // and an additional dimming term based on the distance to a view plane, kind of idea,
+    // orthographic projection, just dropping the z term.
+
+    // create a linear buffer of all the point locations in minimum representation
+    size_t maxSize = 0;
+    vector< vec2 > points;
+    {
+        std::lock_guard< mutex > lock( anchoredParticlesGuard );
+        for ( int x = minExtents.x; x < maxExtents.x; x++ ) {
+            for ( int y = minExtents.y; y < maxExtents.y; y++ ) {
+                for ( int z = minExtents.z; z < maxExtents.z; z++ ) {
+                    if ( shared_ptr< gridCell > gcp; anchoredParticles.find( ivec3( x, y, z ), gcp ) ) {
+                        maxSize = max( maxSize, gcp->particles.size() );
+                        // cout << "found nonzero contents at " << to_string( ivec3( x, y, z ) ) << endl;
+                        for ( auto& p : gcp->particles ) {
+                            vec2 pT = ( p * p0 ).xy();
+                            points.push_back( pT );
+                            // cout << to_string( pT ) << endl;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // cout << "processed " << points.size() << " particles" << endl;
+
+    // information about anchored particles
+    int binCountsA[ 1000 * 1000 ];
+    int maxCountA = 0;
+    int nonzeroBinsA = 0;
+    for ( auto& b : binCountsA ) { b = 0; }
+    for ( auto& p : points ) {
+        ivec2 loc = ivec2(
+            clamp( int( remap( p.x, minExtents.x, maxExtents.x, 0.0f, 1000.0f ) ), 0, 999 ),
+            clamp( int( remap( p.y, minExtents.y, maxExtents.y, 0.0f, 1000.0f ) ), 0, 999 )
+            // int( remap( p.x, minExtents.x, maxExtents.x, 0.0f, 1000.0f ) ),
+            // int( remap( p.y, minExtents.y, maxExtents.y, 0.0f, 1000.0f ) )
+        );
+        binCountsA[ loc.x + 1000 * loc.y ]++;
+        maxCountA = max( maxCountA, binCountsA[ loc.x + 1000 * loc.y ] );
+    }
+
+    // write out the image
+    std::vector< uint8_t > data;
+    for ( auto& p : binCountsA ) {
+        for ( int i = 0; i < 3; i++ )
+            // data.push_back( 255 * glm::pow( float( p ) / float( maxCountA ), 0.2f ) );
+            data.push_back( 255 * int( p != 0 ) );
+        data.push_back( 255 );
+    }
+    stbi_write_png( string( "test.png" ).c_str(), 1000, 1000, 4, &data[ 0 ], 4000 );
 
 	return 0;
 }
