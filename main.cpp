@@ -299,7 +299,7 @@ void particleUpdate ( uintmax_t jobIndex ) {
             float closestBondingPointDistance = 10000.0f;
             
             // now looking at a list, find the closest...
-            cout << to_string( closestPointTransform ) << endl;
+            // cout << to_string( closestPointTransform ) << endl;
             for ( auto& bpo : bondingSiteOffsets ) {
                 vec4 transformedBondingPointOffset = closestPointTransform * bpo;
                 const float d = glm::distance( particle.xyz(), closestPointTransformed + transformedBondingPointOffset.xyz() );
@@ -315,9 +315,10 @@ void particleUpdate ( uintmax_t jobIndex ) {
 
             // the mat4 tells us the orientation and the position of the point
             // we have a very low chance to alter the orientation... jitter position, etc
-            // if ( abs( jitter() < 0.0001f ) ) {
-                // closestPointTransform = glm::translate() // ... need to translate back to origin + rotate
-            // }
+            if ( abs( jitter() < 0.0005f ) ) {
+                closestBondingPointOffset += vec3( jitter(), jitter(), jitter() );
+                closestPointTransform = glm::translate( glm::rotate( glm::translate( closestPointTransform, -closestPointTransformed ), jitter(), glm::normalize( vec3( jitter(), jitter(), jitter() ) ) ), closestPointTransformed );
+            }
             
             const vec4 TvX = closestPointTransform * vX;
             const vec4 TvY = closestPointTransform * vY;
@@ -393,7 +394,7 @@ void prepareOutput() {
         float b = 255 * glm::pow( float( binCountsA[ i ] ) / float( maxCountA ), 0.8f );
         // float b = 255.0f * int( binCountsA[ i ] != 0 );
         
-        vec3 c = glm::mix( vec3( 1.0f, 0.5f, 0.0f ), vec3( 0.0f, 0.5f, 1.0f ), vec3( h ) );
+        vec3 c = glm::mix( vec3( 1.0f, 0.5f, 0.0f ), vec3( 0.0f, 1.0f, 0.3f ), vec3( h ) );
 
         data.push_back( b * c.x );
         data.push_back( b * c.y );
@@ -405,7 +406,7 @@ void prepareOutput() {
 	auto now = std::chrono::system_clock::now();
 	auto inTime_t = std::chrono::system_clock::to_time_t( now );
 	std::stringstream ssA;
-	ssA << std::put_time( std::localtime( &inTime_t ), "%Y-%m-%d at %H-%M-%S" );
+	ssA << std::put_time( std::localtime( &inTime_t ), "%Y-%m-%d at %H-%M-%S.png" );
     stbi_write_png( ssA.str().c_str(), 1000, 1000, 4, &data[ 0 ], 4000 );
 }
 //=================================================================================================
@@ -413,7 +414,7 @@ void prepareOutput() {
 atomic_uintmax_t jobCounter { 0 };
 
 // threadpool setup
-constexpr int NUM_THREADS = 72;
+constexpr int NUM_THREADS = 8;
 bool threadFences[ NUM_THREADS ];
 bool threadKill;
 std::thread threads[ NUM_THREADS ];
@@ -454,9 +455,9 @@ int main () {
     // we need to pick a set of offsets to use for the crystal growth...
         // start with a "tetragonal", which will emphasize orientation because it has longer offsets along one axis
     // the angle is uniform, so we will leave this as just a nonuniformly scaled basis...
-    const float xXx = 0.1618f;
-    const float yYy = 0.1618f;
-    const float zZz = 0.618f;
+    const float xXx = 1.618f;
+    const float yYy = 1.618f;
+    const float zZz = 1.618f;
     // note that 6 bonding points is in no way a constraint here
     bondingSiteOffsets = {
         vec4( 0.0f, 0.0f, -zZz, 0.0f ),
