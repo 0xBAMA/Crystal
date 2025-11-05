@@ -160,11 +160,13 @@ struct gridCell {
 
 // the list of particles which have been anchored
 CTSL::HashMap< ivec3, std::shared_ptr< gridCell > > anchoredParticles;
+mutex anchoredParticlesGuard;
 
 // maintaining stats on the above container
 ivec3 minExtents = ivec3( -20 );
 ivec3 maxExtents = ivec3(  20 );
 int numAnchored = 0;
+int uniqueKeys = 0;
 
 // get a point on the boundary
 thread_local rng pick( 0.0f, 1.0f );
@@ -195,10 +197,24 @@ void respawnParticle ( vec4 &p ) {
 }
 
 void anchorParticle ( const ivec3 iP, const mat4 &pTransform ) {
-    // we need to anchor this particle...
+    // we need to anchor this particle... protect behind a mutex
+    std::lock_guard< mutex > lock( anchoredParticlesGuard );
+    // cout << "anchoring particle at " << to_string( iP ) << " with transform " << to_string( pTransform ) << endl;
+    // cout << " this should be close to " << to_string( ( pTransform * p0 ).xyz() ) << endl;
 
     // push the constructed mat4 onto the list
-    // anchoredParticles[ iP ].Add( pTransform );
+    if ( std::shared_ptr< gridCell > gcp; anchoredParticles.find( iP, gcp ) ) {
+        // cout << "Grid cell found with " << gcp->GetCount() << " elements" << endl;
+        // we have a gridCell object already instantiated for managing the contents...
+        gcp->Add( pTransform );
+    } else {
+        // need to insert a new key... init the gridCell and add the mat4
+        // cout << "Grid cell not found, adding cell " << to_string( iP ) << endl;
+        uniqueKeys++;
+        std::shared_ptr< gridCell > temp = make_shared< gridCell >();
+        anchoredParticles.insert( iP, temp );
+        temp->Add( pTransform );
+    }
 
     // tracking how many particles have been added, and the min and max extents
     minExtents = glm::min( iP, minExtents );
@@ -217,16 +233,20 @@ constexpr int32_t NUM_PARTICLES = 10'000;
 vec4 particlePool[ NUM_PARTICLES ];
 void particleUpdate ( uintmax_t jobIndex ) {
     thread_local const uintmax_t idx = jobIndex % NUM_PARTICLES;
-    vec4 &particle = particlePool[ idx ];
+    vec4 &particle = std::ref( particlePool[ idx ] );
+
+    // cout << "Job " << jobIndex << " running... " << endl;
 
     // oob decrement + respawn logic
     if ( glm::any( glm::lessThanEqual( particle.xyz(), vec3( minExtents - ivec3( 10 ) ) ) ) ||
         glm::any( glm::greaterThanEqual( particle.xyz(), vec3( maxExtents + ivec3( 10 ) ) ) ) ) {
         // idea is that when you stray outside of the bounding volume, you suffer some attrition...
         particle.w--;
+        // cout << "  particle attrition remaining: " << particle.w << endl;
         if ( particle.w < 0.0f ) {
             // and eventually when you die, you respawn somewhere on the boundary
             respawnParticle( particle );
+            // cout << "  particle respawned at " << to_string( particle.xyz() ) << endl;
         }
     }
 
@@ -234,10 +254,11 @@ void particleUpdate ( uintmax_t jobIndex ) {
     particle.x += temperature * jitter();
     particle.y += temperature * jitter();
     particle.z += temperature * jitter();
+    // cout << "  particle position updated to " << to_string( particle.xyz() ) << endl;
 
     // are we going to bond to something? is there a nearby anchored particle?
     // first, let's look at all the particles in the local neighborhood...
-    thread_local std::vector< shared_ptr< const mat4 > > nearbyPoints; // eventually this should be a static scratch pool per thread to avoid allocations
+    std::vector< mat4 > nearbyPoints;
 
     // looking at the local neighborhood...
     const auto& s = { -1, 0, 1 };
@@ -246,50 +267,52 @@ void particleUpdate ( uintmax_t jobIndex ) {
     for ( int z : s ) {
         // if ( x == 0 && y == 0 && z == 0 ) continue;
         const ivec3 loc = ivec3( particle.xyz() ) + ivec3( x, y, z );
-        std::shared_ptr< gridCell > gcp;
 
         // "find()" will also return the pointer to the container contents
-        if ( anchoredParticles.find( loc, gcp ) ) {
+        if ( std::shared_ptr< gridCell > gcp; anchoredParticles.find( loc, gcp ) ) {
+            // cout << "  particle found neighbor cell "  << to_string( loc ) << endl;
             // we have located a cell which contains particles...
             const size_t count = gcp->GetCount();
+            // cout << "   it contains "  << count << " elements..." << endl;
             for ( int i = 0; i < count; i++ ) {
-                const mat4 mat = gcp->Get( i );
-                nearbyPoints.push_back( make_shared< const mat4 >( mat ) );
+                nearbyPoints.push_back( gcp->Get( i ) );
+                // cout << "    " << to_string( ( gcp->Get( i ) * p0 ).xyz() ) << endl;
             }
         } // else we did not find any contents here
     }
 
     // we need to find out which, if any, of these points can be anchored to...
-    if ( nearbyPoints.size() != 0 ) {
+    if ( !nearbyPoints.empty() ) {
 
         // cout << "I have " << nearbyPoints.size() << " Neighbors!!" << endl;
 
         // finding the closest point... we know we have 1, so we start with that
-        thread_local mat4 closestPointTransform = *nearbyPoints[ 0 ].get();
-        thread_local float closestPointDistance = glm::distance(
+        mat4 closestPointTransform = nearbyPoints[ 0 ];
+        float closestPointDistance = glm::distance(
             particle.xyz(), ( closestPointTransform * p0 ).xyz()
         );
 
         // if we have more than one point to consider, compare them
         for ( auto& transform : nearbyPoints ) {
             const float d = glm::distance(
-                particle.xyz(), ( *transform.get() * p0 ).xyz()
+                particle.xyz(), ( transform * p0 ).xyz()
             );
+            // cout << "comparing points... " << to_string( particle.xyz() ) <<  " and " << to_string( ( transform * p0 ).xyz() ) << endl;
             if ( d < closestPointDistance ) {
                 closestPointDistance = d;
-                closestPointTransform = *transform.get();
+                closestPointTransform = transform;
             }
         }
 
         // some additional bonding criteria...?
-        if ( closestPointDistance < 1.0f ) { // close enough... random hash... etc
+        if ( closestPointDistance < 1.2f ) { // close enough... random hash... etc
             // figure out which of bonding sites you want to bond to... probably the closest one of them
 
             // the mat4 tells us the orientation and the position of the point
 
             // and add a particle with the indicated transform
                 // right now we will use only position, but orientation is important for crystal lattice
-            thread_local const mat4 pTransform = glm::translate( identity, particle.xyz() );
+            const mat4 pTransform = glm::translate( identity, particle.xyz() );
 
             // mutex is locked, only during add... math happens outside, nice
             anchorParticle( ivec3( particle.xyz() ), pTransform );
@@ -305,7 +328,7 @@ void particleUpdate ( uintmax_t jobIndex ) {
 atomic_uintmax_t jobCounter { 0 };
 
 // threadpool setup
-constexpr int NUM_THREADS = 16;
+constexpr int NUM_THREADS = 4;
 bool threadFences[ NUM_THREADS ];
 bool threadKill;
 std::thread threads[ NUM_THREADS ];
@@ -322,6 +345,27 @@ int main () {
     // set all the thread fences "true"
     for ( auto& fence : threadFences )
         fence = true;
+
+    // we need to make sure there are particles to update...
+    // cout << "Spawning Particles................ ";
+    rng pickk = rng( 0.0f,  1.0f );
+    for ( auto& p : particlePool ) {
+        // respawnParticle( p );
+        p.x = remap( pickk(), 0.0f, 1.0f, -20.0f, 20.0f );
+        p.y = remap( pickk(), 0.0f, 1.0f, -20.0f, 20.0f );
+        p.z = remap( pickk(), 0.0f, 1.0f, -20.0f, 20.0f );
+        p.w = 100.0f;
+    }
+    // cout << "Done." << endl;
+
+    // an initial point in the model, so we have something to bond to
+    // cout << "Anchoring Initial Seed Particles.. ";
+    rng pR( -2.0f, 2.0f );
+    for ( int i = 0; i < 10; i++ ) {
+        mat4 transform = glm::translate( glm::rotate( identity, pR(), normalize( vec3( pR(), pR(), pR() ) ) ), 10.0f * vec3( pR(), pR(), pR() ) );
+        anchorParticle( transform * p0, transform );
+    }
+    // cout << "Done." << endl;
     
     cout << "Spawning Reporter Thread.......... ";
 	std::thread reporterThread = std::thread(
@@ -399,36 +443,7 @@ int main () {
                 return false;
             });
 
-            // an initial point in the model, so we have something to bond to
-            // cout << "Anchoring Initial Seed Particles.. ";
-            rng pR( -2.0f, 2.0f );
-            for ( int i = 0; i < 10; i++ ) {
-                mat4 transform = glm::translate( glm::rotate( identity, pR(), normalize( vec3( pR(), pR(), pR() ) ) ), 10.0f * vec3( pR(), pR(), pR() ) );
-                anchorParticle( transform * p0, transform );
-            }
-            // cout << "Done." << endl;
-
-            // int detectedPointCount = 0;
-            // for ( auto& [k,v] : anchoredParticles )
-                // for ( auto& p : v.particles ) {
-                    // detectedPointCount++;
-                    // cout << "found: " << to_string( p ) << " at " << to_string( k ) << endl;
-                    // cout << "confirm: " << to_string( p * vec4( 0.0f, 0.0f, 0.0f, 1.0f ) ) << endl;
-                // }
-            // cout << "Confirm Contents: map has " << detectedPointCount << " elements" << endl;
-
-            // we need to make sure there are particles to update...
-            // cout << "Spawning Particles................ ";
-            for ( auto& p : particlePool ) {
-                // respawnParticle( p );
-                p.x = remap( pick(), 0.0f, 1.0f, -20.0f, 20.0f );
-                p.y = remap( pick(), 0.0f, 1.0f, -20.0f, 20.0f );
-                p.z = remap( pick(), 0.0f, 1.0f, -20.0f, 20.0f );
-                p.w = 100.0f;
-            }
-            // cout << "Done." << endl;
-
-            // "main loop"
+        // "main loop"
             // cout << "Entering Main Loop..." << endl;
             ftxui::Loop loop( &screen, ftxDAG );
             while (!loop.HasQuitted() ) {
