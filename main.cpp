@@ -2,6 +2,7 @@
 // command line output
 #include <string>
 #include <iostream>
+#include <sstream>
 using std::cout;
 using std::endl;
 using std::string;
@@ -73,6 +74,7 @@ using namespace ftxui;
 using glm::vec2;
 using glm::vec3;
 using glm::vec4;
+using glm::mat3;
 using glm::mat4;
 using glm::ivec2;
 using glm::pi;
@@ -82,6 +84,9 @@ using glm::dot;
 // constants for shortening calculations of points + vector offsets
 constexpr vec4 p0 = vec4( 0.0f, 0.0f, 0.0f, 1.0f );
 constexpr vec4 v0 = vec4( 0.0f, 0.0f, 0.0f, 0.0f );
+constexpr vec4 vX = vec4( 1.0f, 0.0f, 0.0f, 0.0f );
+constexpr vec4 vY = vec4( 0.0f, 1.0f, 0.0f, 0.0f );
+constexpr vec4 vZ = vec4( 0.0f, 0.0f, 1.0f, 0.0f );
 constexpr mat4 identity = mat4( 1.0f );
 
 // key hash needed for std::unordered_map with ivec3 keys
@@ -148,30 +153,23 @@ struct gridCell {
     mat4 Get( const int &idx ) {
         // locking the non-exclusive read mutex
         std::shared_lock lock( mutex );
-
-        // get index i from the list... we need to avoid seg faulting, so return a dummy value if we don't have it
-        // if ( idx >= particles.size() ) {
-            // return mat4( 1.0f );
-        // } else {
-            return particles[ idx ];
-        // }
+        return particles[ idx ];
     }
 };
 
 // the list of particles which have been anchored
 CTSL::HashMap< ivec3, std::shared_ptr< gridCell > > anchoredParticles;
-mutex anchoredParticlesGuard;
+// mutex anchoredParticlesGuard;
 
 // maintaining stats on the above container
 ivec3 minExtents = ivec3( -20 );
 ivec3 maxExtents = ivec3(  20 );
 int numAnchored = 0;
-int uniqueKeys = 0;
 
 // get a point on the boundary
 thread_local rng pick( 0.0f, 1.0f );
 void respawnParticle ( vec4 &p ) {
-    thread_local bool face = ( pick() < 0.5f );
+    const bool face = ( pick() < 0.5f );
     constexpr float margin = 0.0f;
     p.x = glm::mix( minExtents.x - margin, maxExtents.x + margin, pick() );
     p.y = glm::mix( minExtents.y - margin, maxExtents.y + margin, pick() );
@@ -198,20 +196,15 @@ void respawnParticle ( vec4 &p ) {
 
 void anchorParticle ( const ivec3 iP, const mat4 &pTransform ) {
     // we need to anchor this particle... protect behind a mutex
-    std::lock_guard< mutex > lock( anchoredParticlesGuard );
-    // cout << "anchoring particle at " << to_string( iP ) << " with transform " << to_string( pTransform ) << endl;
-    // cout << " this should be close to " << to_string( ( pTransform * p0 ).xyz() ) << endl;
+    // lock_guard< mutex > lock( anchoredParticlesGuard );
 
     // push the constructed mat4 onto the list
-    if ( std::shared_ptr< gridCell > gcp; anchoredParticles.find( iP, gcp ) ) {
-        // cout << "Grid cell found with " << gcp->GetCount() << " elements" << endl;
+    if ( shared_ptr< gridCell > gcp; anchoredParticles.find( iP, gcp ) ) {
         // we have a gridCell object already instantiated for managing the contents...
         gcp->Add( pTransform );
     } else {
         // need to insert a new key... init the gridCell and add the mat4
-        // cout << "Grid cell not found, adding cell " << to_string( iP ) << endl;
-        uniqueKeys++;
-        std::shared_ptr< gridCell > temp = make_shared< gridCell >();
+        shared_ptr< gridCell > temp = make_shared< gridCell >();
         anchoredParticles.insert( iP, temp );
         temp->Add( pTransform );
     }
@@ -225,28 +218,29 @@ void anchorParticle ( const ivec3 iP, const mat4 &pTransform ) {
 }
 
 // this is the update, operating on a particular particle
-const float temperature = 5.0f; // make this a sim parameter, eventually
+float temperature = 5.0f;
 thread_local rngN jitter( 0.0f, 0.1f );
+
+// these are the bonding sites
+vector< vec4 > bondingSiteOffsets;
 
 // the particles are the diffusion-limit mechanism
 constexpr int32_t NUM_PARTICLES = 10'000'000;
+// constexpr int32_t NUM_PARTICLES = 10'000;
+
 vec4 particlePool[ NUM_PARTICLES ];
 void particleUpdate ( uintmax_t jobIndex ) {
     thread_local const uintmax_t idx = jobIndex % NUM_PARTICLES;
     vec4 &particle = std::ref( particlePool[ idx ] );
-
-    // cout << "Job " << jobIndex << " running... " << endl;
 
     // oob decrement + respawn logic
     if ( glm::any( glm::lessThanEqual( particle.xyz(), vec3( minExtents - ivec3( 10 ) ) ) ) ||
         glm::any( glm::greaterThanEqual( particle.xyz(), vec3( maxExtents + ivec3( 10 ) ) ) ) ) {
         // idea is that when you stray outside of the bounding volume, you suffer some attrition...
         particle.w--;
-        // cout << "  particle attrition remaining: " << particle.w << endl;
         if ( particle.w < 0.0f ) {
             // and eventually when you die, you respawn somewhere on the boundary
             respawnParticle( particle );
-            // cout << "  particle respawned at " << to_string( particle.xyz() ) << endl;
         }
     }
 
@@ -254,7 +248,6 @@ void particleUpdate ( uintmax_t jobIndex ) {
     particle.x += temperature * jitter();
     particle.y += temperature * jitter();
     particle.z += temperature * jitter();
-    // cout << "  particle position updated to " << to_string( particle.xyz() ) << endl;
 
     // are we going to bond to something? is there a nearby anchored particle?
     // first, let's look at all the particles in the local neighborhood...
@@ -270,13 +263,10 @@ void particleUpdate ( uintmax_t jobIndex ) {
 
         // "find()" will also return the pointer to the container contents
         if ( std::shared_ptr< gridCell > gcp; anchoredParticles.find( loc, gcp ) ) {
-            // cout << "  particle found neighbor cell "  << to_string( loc ) << endl;
             // we have located a cell which contains particles...
             const size_t count = gcp->GetCount();
-            // cout << "   it contains "  << count << " elements..." << endl;
             for ( int i = 0; i < count; i++ ) {
                 nearbyPoints.push_back( gcp->Get( i ) );
-                // cout << "    " << to_string( ( gcp->Get( i ) * p0 ).xyz() ) << endl;
             }
         } // else we did not find any contents here
     }
@@ -286,41 +276,138 @@ void particleUpdate ( uintmax_t jobIndex ) {
 
         // finding the closest point... we know we have 1, so we start with that
         mat4 closestPointTransform = nearbyPoints[ 0 ];
+        vec3 closestPointTransformed = ( closestPointTransform * p0 ).xyz();
         float closestPointDistance = glm::distance(
-            particle.xyz(), ( closestPointTransform * p0 ).xyz()
+            particle.xyz(), closestPointTransformed
         );
 
         // if we have more than one point to consider, compare them
         for ( auto& transform : nearbyPoints ) {
-            const float d = glm::distance(
-                particle.xyz(), ( transform * p0 ).xyz()
-            );
-            // cout << "comparing points... " << to_string( particle.xyz() ) <<  " and " << to_string( ( transform * p0 ).xyz() ) << endl;
+            const vec3 p = ( transform * p0 ).xyz();
+            const float d = glm::distance( particle.xyz(), p );
             if ( d < closestPointDistance ) {
                 closestPointDistance = d;
                 closestPointTransform = transform;
+                closestPointTransformed = p;
             }
         }
 
         // some additional bonding criteria...?
-        if ( closestPointDistance < 0.2f ) { // close enough... random hash... etc
+        if ( closestPointDistance < 0.25f ) { // close enough... random hash... etc
             // figure out which of bonding sites you want to bond to... probably the closest one of them
+            vec3 closestBondingPointOffset;
+            float closestBondingPointDistance = 10000.0f;
+            
+            // now looking at a list, find the closest...
+            cout << to_string( closestPointTransform ) << endl;
+            for ( auto& bpo : bondingSiteOffsets ) {
+                vec4 transformedBondingPointOffset = closestPointTransform * bpo;
+                const float d = glm::distance( particle.xyz(), closestPointTransformed + transformedBondingPointOffset.xyz() );
+                if ( d < closestBondingPointDistance ) {
+                    closestBondingPointDistance = d;
+                    closestBondingPointOffset = transformedBondingPointOffset.xyz();
+                }
+            }
+
+            // cout << "selected " << to_string( closestBondingPointOffset ) << endl;
+
+            // apply the offset to the particle, and the orientation from before....
 
             // the mat4 tells us the orientation and the position of the point
+            // we have a very low chance to alter the orientation... jitter position, etc
+            // if ( abs( jitter() < 0.0001f ) ) {
+                // closestPointTransform = glm::translate() // ... need to translate back to origin + rotate
+            // }
+            
+            const vec4 TvX = closestPointTransform * vX;
+            const vec4 TvY = closestPointTransform * vY;
+            const vec4 TvZ = closestPointTransform * vZ;
+            
+            const vec3 p = closestPointTransformed + closestBondingPointOffset;
+            const mat4 pTransform = mat4( TvX, TvY, TvZ, vec4( p, 1.0f ) );
+
+            // cout << to_string( glm::translate( closestPointTransform, -closestPointTransformed ) ) << endl;
 
             // and add a particle with the indicated transform
                 // right now we will use only position, but orientation is important for crystal lattice
-            const mat4 pTransform = glm::translate( identity, particle.xyz() );
+            // const mat4 pTransform = glm::translate( identity, particle.xyz() );
 
             // mutex is locked, only during add... math happens outside, nice
-            anchorParticle( ivec3( particle.xyz() ), pTransform );
+            anchorParticle( ivec3( p ), pTransform );
 
             // since we bound to a surface, the point location is no longer valid and should not proceed
             respawnParticle( particle ); // we will now respawn somewhere on the sim boundary
         }
     }
 }
+//=================================================================================================
+void prepareOutput() {
+       // create a linear buffer of all the point locations in minimum representation
+    size_t maxSize = 0;
+    vector< vec3 > points;
+    points.reserve( numAnchored );
+    {
+        // lock_guard< mutex > lock( anchoredParticlesGuard );
+        for ( int x = minExtents.x; x < maxExtents.x; x++ ) {
+            for ( int y = minExtents.y; y < maxExtents.y; y++ ) {
+                for ( int z = minExtents.z; z < maxExtents.z; z++ ) {
+                    if ( shared_ptr< gridCell > gcp; anchoredParticles.find( ivec3( x, y, z ), gcp ) ) {
+                        maxSize = max( maxSize, gcp->particles.size() );
+                        for ( auto& p : gcp->particles ) {
+                            vec3 pT = ( p * p0 ).xyz();
+                            points.push_back( pT );
+                        }
+                    }
+                }
+            }
+        }
+    }
 
+
+    // information about anchored particles
+    int binCountsA[ 1000 * 1000 ];
+    float binHeights[ 1000 * 1000 ];
+
+    int maxCountA = 0;
+    int nonzeroBinsA = 0;
+    for ( auto& b : binCountsA ) { b = 0; }
+    for ( auto& p : points ) {
+        vec3 loc = vec3(
+            clamp( remap( p.x, minExtents.x, maxExtents.x, 0.0f, 1000.0f ), 0.0f, 999.0f ),
+            clamp( remap( p.y, minExtents.y, maxExtents.y, 0.0f, 1000.0f ), 0.0f, 999.0f ),
+            clamp( remap( p.z, minExtents.z, maxExtents.z, 0.0f, 1000.0f ), 0.0f, 999.0f )
+        );
+        const int idx = int( loc.x ) + 1000 * int( loc.y ); 
+        binCountsA[ idx ]++;
+        binHeights[ idx ] = max( loc.z, binHeights[ idx ] );
+        maxCountA = max( maxCountA, binCountsA[ idx ] );
+    }
+
+    cout << "processed " << points.size() << " particles" << endl;
+    cout << "found max " << maxCountA << " points per bin" << endl;
+    // write out the image
+    std::vector< uint8_t > data;
+    for ( int i = 0; i < ( 1000 * 1000 ); i++ ) {
+        // some height term and a density term
+        float h = binHeights[ i ] / 1000.0f;
+        float b = 255 * glm::pow( float( binCountsA[ i ] ) / float( maxCountA ), 0.8f );
+        // float b = 255.0f * int( binCountsA[ i ] != 0 );
+        
+        vec3 c = glm::mix( vec3( 1.0f, 0.5f, 0.0f ), vec3( 0.0f, 0.5f, 1.0f ), vec3( h ) );
+
+        data.push_back( b * c.x );
+        data.push_back( b * c.y );
+        data.push_back( b * c.z );
+        
+        data.push_back( 255 );
+    }
+
+	auto now = std::chrono::system_clock::now();
+	auto inTime_t = std::chrono::system_clock::to_time_t( now );
+	std::stringstream ssA;
+	ssA << std::put_time( std::localtime( &inTime_t ), "%Y-%m-%d at %H-%M-%S" );
+    stbi_write_png( ssA.str().c_str(), 1000, 1000, 4, &data[ 0 ], 4000 );
+}
 //=================================================================================================
 // for dispatching particle updates
 atomic_uintmax_t jobCounter { 0 };
@@ -346,12 +433,11 @@ int main () {
 
     // we need to make sure there are particles to update...
     // cout << "Spawning Particles................ ";
-    rng pickk = rng( 0.0f,  1.0f );
     for ( auto& p : particlePool ) {
         // respawnParticle( p );
-        p.x = remap( pickk(), 0.0f, 1.0f, -20.0f, 20.0f );
-        p.y = remap( pickk(), 0.0f, 1.0f, -20.0f, 20.0f );
-        p.z = remap( pickk(), 0.0f, 1.0f, -20.0f, 20.0f );
+        p.x = remap( jitter(), 0.0f, 1.0f, -20.0f, 20.0f );
+        p.y = remap( jitter(), 0.0f, 1.0f, -20.0f, 20.0f );
+        p.z = remap( jitter(), 0.0f, 1.0f, -4.0f, 4.0f );
         p.w = 100.0f;
     }
     // cout << "Done." << endl;
@@ -364,6 +450,22 @@ int main () {
         anchorParticle( transform * p0, transform );
     }
     // cout << "Done." << endl;
+
+    // we need to pick a set of offsets to use for the crystal growth...
+        // start with a "tetragonal", which will emphasize orientation because it has longer offsets along one axis
+    // the angle is uniform, so we will leave this as just a nonuniformly scaled basis...
+    const float xXx = 0.1618f;
+    const float yYy = 0.1618f;
+    const float zZz = 0.618f;
+    // note that 6 bonding points is in no way a constraint here
+    bondingSiteOffsets = {
+        vec4( 0.0f, 0.0f, -zZz, 0.0f ),
+        vec4( 0.0f, 0.0f,  zZz, 0.0f ),
+        vec4( 0.0f, -yYy, 0.0f, 0.0f ),
+        vec4( 0.0f,  yYy, 0.0f, 0.0f ),
+        vec4( -xXx, 0.0f, 0.0f, 0.0f ),
+        vec4(  xXx, 0.0f, 0.0f, 0.0f ),
+    };
     
     cout << "Spawning Reporter Thread.......... ";
 	std::thread reporterThread = std::thread(
@@ -386,7 +488,7 @@ int main () {
                     // Checkbox("Check me", &checked[0]),
                     // Checkbox("Check me", &checked[1]),
                     // Checkbox("Check me", &checked[2]),
-                    // Slider("Slider", &slider, 0.f, 100.f),
+                    Slider( "Temperature", &temperature, 0.0f, 20.0f ),
                     Renderer( [&] ( bool focused ) {
                         auto c1 = color( Color::RGB( 255, 34, 0 ) );
                         auto c2 = color( Color::RGB( 255, 255, 34 ) );
@@ -438,6 +540,12 @@ int main () {
                     screen.ExitLoopClosure()();
                     return true;
                 }
+
+                if ( event == Event::Character('w') ) {
+                    prepareOutput();
+                    return true;
+                }
+
                 return false;
             });
 
@@ -509,75 +617,9 @@ int main () {
     // join the reporter thread, now that everything else has terminated
     reporterThread.join();
     cout << "Terminating....................... Done." << endl;
-    cout << "Saw " << uniqueKeys << " additions to the data structure" << endl;
 
     // save the data out, bake out a preview or whatever for now...
-
-    // I think I want to do basic pixel binning first... get an idea of counts...
-    // then on a second pass, we inform an initial scale factor based on that max total
-    // and an additional dimming term based on the distance to a view plane, kind of idea,
-    // orthographic projection, just dropping the z term.
-
-    // create a linear buffer of all the point locations in minimum representation
-    size_t maxSize = 0;
-    vector< vec3 > points;
-    {
-        std::lock_guard< mutex > lock( anchoredParticlesGuard );
-        for ( int x = minExtents.x; x < maxExtents.x; x++ ) {
-            for ( int y = minExtents.y; y < maxExtents.y; y++ ) {
-                for ( int z = minExtents.z; z < maxExtents.z; z++ ) {
-                    if ( shared_ptr< gridCell > gcp; anchoredParticles.find( ivec3( x, y, z ), gcp ) ) {
-                        maxSize = max( maxSize, gcp->particles.size() );
-                        // cout << "found nonzero contents at " << to_string( ivec3( x, y, z ) ) << endl;
-                        for ( auto& p : gcp->particles ) {
-                            vec3 pT = ( p * p0 ).xyz();
-                            points.push_back( pT );
-                            // cout << to_string( pT ) << endl;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-
-    // information about anchored particles
-    int binCountsA[ 1000 * 1000 ];
-    float binHeights[ 1000 * 1000 ];
-
-    int maxCountA = 0;
-    int nonzeroBinsA = 0;
-    for ( auto& b : binCountsA ) { b = 0; }
-    for ( auto& p : points ) {
-        vec3 loc = vec3(
-            clamp( remap( p.x, minExtents.x, maxExtents.x, 0.0f, 1000.0f ), 0.0f, 999.0f ),
-            clamp( remap( p.y, minExtents.y, maxExtents.y, 0.0f, 1000.0f ), 0.0f, 999.0f ),
-            clamp( remap( p.z, minExtents.z, maxExtents.z, 0.0f, 1000.0f ), 0.0f, 999.0f )
-        );
-        const int idx = int( loc.x ) + 1000 * int( loc.y ); 
-        binCountsA[ idx ]++;
-        binHeights[ idx ] = max( loc.z, binHeights[ idx ] );
-        maxCountA = max( maxCountA, binCountsA[ idx ] );
-    }
-
-    cout << "processed " << points.size() << " particles" << endl;
-    // cout << "found max " << maxCountA << " points per bin" << endl;
-    // write out the image
-    std::vector< uint8_t > data;
-    for ( int i = 0; i < ( 1000 * 1000 ); i++ ) {
-        // some height term and a density term
-        float h = binHeights[ i ] / 1000.0f;
-        float b = 255 * glm::pow( float( binCountsA[ i ] ) / float( maxCountA ), 0.8f );
-
-        vec3 c = glm::mix( vec3( 1.0f, 0.9f, 0.3f ), vec3( 0.3f, 0.7f, 1.0f ), vec3( h ) );
-
-        data.push_back( b * c.x );
-        data.push_back( b * c.y );
-        data.push_back( b * c.z );
-        
-        data.push_back( 255 );
-    }
-    stbi_write_png( string( "test.png" ).c_str(), 1000, 1000, 4, &data[ 0 ], 4000 );
+    prepareOutput();
 
 	return 0;
 }
