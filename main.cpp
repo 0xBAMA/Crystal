@@ -162,8 +162,8 @@ CTSL::HashMap< ivec3, std::shared_ptr< gridCell > > anchoredParticles;
 // mutex anchoredParticlesGuard;
 
 // maintaining stats on the above container
-ivec3 minExtents = ivec3( -20 );
-ivec3 maxExtents = ivec3(  20 );
+ivec3 minExtents = ivec3( -20, -20, -5 );
+ivec3 maxExtents = ivec3(  20, 20, 5 );
 int numAnchored = 0;
 
 // get a point on the boundary
@@ -309,13 +309,11 @@ void particleUpdate ( uintmax_t jobIndex ) {
                 }
             }
 
-            // cout << "selected " << to_string( closestBondingPointOffset ) << endl;
-
             // apply the offset to the particle, and the orientation from before....
 
             // the mat4 tells us the orientation and the position of the point
             // we have a very low chance to alter the orientation... jitter position, etc
-            if ( abs( jitter() < 0.0005f ) ) {
+            if ( abs( jitter() < 0.01f ) ) {
                 closestBondingPointOffset += vec3( jitter(), jitter(), jitter() );
                 closestPointTransform = glm::translate( glm::rotate( glm::translate( closestPointTransform, -closestPointTransformed ), jitter(), glm::normalize( vec3( jitter(), jitter(), jitter() ) ) ), closestPointTransformed );
             }
@@ -326,12 +324,6 @@ void particleUpdate ( uintmax_t jobIndex ) {
             
             const vec3 p = closestPointTransformed + closestBondingPointOffset;
             const mat4 pTransform = mat4( TvX, TvY, TvZ, vec4( p, 1.0f ) );
-
-            // cout << to_string( glm::translate( closestPointTransform, -closestPointTransformed ) ) << endl;
-
-            // and add a particle with the indicated transform
-                // right now we will use only position, but orientation is important for crystal lattice
-            // const mat4 pTransform = glm::translate( identity, particle.xyz() );
 
             // mutex is locked, only during add... math happens outside, nice
             anchorParticle( ivec3( p ), pTransform );
@@ -406,7 +398,7 @@ void prepareOutput() {
 	auto now = std::chrono::system_clock::now();
 	auto inTime_t = std::chrono::system_clock::to_time_t( now );
 	std::stringstream ssA;
-	ssA << std::put_time( std::localtime( &inTime_t ), "%Y-%m-%d at %H-%M-%S.png" );
+	ssA << std::put_time( std::localtime( &inTime_t ), "Crystal-%Y-%m-%d at %H-%M-%S.png" );
     stbi_write_png( ssA.str().c_str(), 1000, 1000, 4, &data[ 0 ], 4000 );
 }
 //=================================================================================================
@@ -446,8 +438,8 @@ int main () {
     // an initial point in the model, so we have something to bond to
     // cout << "Anchoring Initial Seed Particles.. ";
     rng pR( -2.0f, 2.0f );
-    for ( int i = 0; i < 10; i++ ) {
-        mat4 transform = glm::translate( glm::rotate( identity, pR(), normalize( vec3( pR(), pR(), pR() ) ) ), 10.0f * vec3( pR(), pR(), pR() ) );
+    for ( int i = 0; i < 100; i++ ) {
+        mat4 transform = glm::translate( glm::rotate( identity, pR(), normalize( vec3( pR(), pR(), pR() ) ) ), 10.0f * vec3( pR(), pR(), pR() / 4.0f ) );
         anchorParticle( transform * p0, transform );
     }
     // cout << "Done." << endl;
@@ -455,9 +447,9 @@ int main () {
     // we need to pick a set of offsets to use for the crystal growth...
         // start with a "tetragonal", which will emphasize orientation because it has longer offsets along one axis
     // the angle is uniform, so we will leave this as just a nonuniformly scaled basis...
-    const float xXx = 1.618f;
-    const float yYy = 1.618f;
-    const float zZz = 1.618f;
+    const float xXx = 0.1618f;
+    const float yYy = 0.618f;
+    const float zZz = 0.618f;
     // note that 6 bonding points is in no way a constraint here
     bondingSiteOffsets = {
         vec4( 0.0f, 0.0f, -zZz, 0.0f ),
