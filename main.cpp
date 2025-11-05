@@ -225,11 +225,11 @@ void anchorParticle ( const ivec3 iP, const mat4 &pTransform ) {
 }
 
 // this is the update, operating on a particular particle
-const float temperature = 1.0f; // make this a sim parameter, eventually
+const float temperature = 5.0f; // make this a sim parameter, eventually
 thread_local rngN jitter( 0.0f, 0.1f );
 
 // the particles are the diffusion-limit mechanism
-constexpr int32_t NUM_PARTICLES = 10'000;
+constexpr int32_t NUM_PARTICLES = 10'000'000;
 vec4 particlePool[ NUM_PARTICLES ];
 void particleUpdate ( uintmax_t jobIndex ) {
     thread_local const uintmax_t idx = jobIndex % NUM_PARTICLES;
@@ -284,8 +284,6 @@ void particleUpdate ( uintmax_t jobIndex ) {
     // we need to find out which, if any, of these points can be anchored to...
     if ( !nearbyPoints.empty() ) {
 
-        // cout << "I have " << nearbyPoints.size() << " Neighbors!!" << endl;
-
         // finding the closest point... we know we have 1, so we start with that
         mat4 closestPointTransform = nearbyPoints[ 0 ];
         float closestPointDistance = glm::distance(
@@ -305,7 +303,7 @@ void particleUpdate ( uintmax_t jobIndex ) {
         }
 
         // some additional bonding criteria...?
-        if ( closestPointDistance < 1.2f ) { // close enough... random hash... etc
+        if ( closestPointDistance < 0.2f ) { // close enough... random hash... etc
             // figure out which of bonding sites you want to bond to... probably the closest one of them
 
             // the mat4 tells us the orientation and the position of the point
@@ -328,7 +326,7 @@ void particleUpdate ( uintmax_t jobIndex ) {
 atomic_uintmax_t jobCounter { 0 };
 
 // threadpool setup
-constexpr int NUM_THREADS = 4;
+constexpr int NUM_THREADS = 72;
 bool threadFences[ NUM_THREADS ];
 bool threadKill;
 std::thread threads[ NUM_THREADS ];
@@ -522,7 +520,7 @@ int main () {
 
     // create a linear buffer of all the point locations in minimum representation
     size_t maxSize = 0;
-    vector< vec2 > points;
+    vector< vec3 > points;
     {
         std::lock_guard< mutex > lock( anchoredParticlesGuard );
         for ( int x = minExtents.x; x < maxExtents.x; x++ ) {
@@ -532,7 +530,7 @@ int main () {
                         maxSize = max( maxSize, gcp->particles.size() );
                         // cout << "found nonzero contents at " << to_string( ivec3( x, y, z ) ) << endl;
                         for ( auto& p : gcp->particles ) {
-                            vec2 pT = ( p * p0 ).xy();
+                            vec3 pT = ( p * p0 ).xyz();
                             points.push_back( pT );
                             // cout << to_string( pT ) << endl;
                         }
@@ -542,30 +540,41 @@ int main () {
         }
     }
 
-    // cout << "processed " << points.size() << " particles" << endl;
 
     // information about anchored particles
     int binCountsA[ 1000 * 1000 ];
+    float binHeights[ 1000 * 1000 ];
+
     int maxCountA = 0;
     int nonzeroBinsA = 0;
     for ( auto& b : binCountsA ) { b = 0; }
     for ( auto& p : points ) {
-        ivec2 loc = ivec2(
-            clamp( int( remap( p.x, minExtents.x, maxExtents.x, 0.0f, 1000.0f ) ), 0, 999 ),
-            clamp( int( remap( p.y, minExtents.y, maxExtents.y, 0.0f, 1000.0f ) ), 0, 999 )
-            // int( remap( p.x, minExtents.x, maxExtents.x, 0.0f, 1000.0f ) ),
-            // int( remap( p.y, minExtents.y, maxExtents.y, 0.0f, 1000.0f ) )
+        vec3 loc = vec3(
+            clamp( remap( p.x, minExtents.x, maxExtents.x, 0.0f, 1000.0f ), 0.0f, 999.0f ),
+            clamp( remap( p.y, minExtents.y, maxExtents.y, 0.0f, 1000.0f ), 0.0f, 999.0f ),
+            clamp( remap( p.z, minExtents.z, maxExtents.z, 0.0f, 1000.0f ), 0.0f, 999.0f )
         );
-        binCountsA[ loc.x + 1000 * loc.y ]++;
-        maxCountA = max( maxCountA, binCountsA[ loc.x + 1000 * loc.y ] );
+        const int idx = int( loc.x ) + 1000 * int( loc.y ); 
+        binCountsA[ idx ]++;
+        binHeights[ idx ] = max( loc.z, binHeights[ idx ] );
+        maxCountA = max( maxCountA, binCountsA[ idx ] );
     }
 
+    cout << "processed " << points.size() << " particles" << endl;
+    // cout << "found max " << maxCountA << " points per bin" << endl;
     // write out the image
     std::vector< uint8_t > data;
-    for ( auto& p : binCountsA ) {
-        for ( int i = 0; i < 3; i++ )
-            // data.push_back( 255 * glm::pow( float( p ) / float( maxCountA ), 0.2f ) );
-            data.push_back( 255 * int( p != 0 ) );
+    for ( int i = 0; i < ( 1000 * 1000 ); i++ ) {
+        // some height term and a density term
+        float h = binHeights[ i ] / 1000.0f;
+        float b = 255 * glm::pow( float( binCountsA[ i ] ) / float( maxCountA ), 0.8f );
+
+        vec3 c = glm::mix( vec3( 1.0f, 0.9f, 0.3f ), vec3( 0.3f, 0.7f, 1.0f ), vec3( h ) );
+
+        data.push_back( b * c.x );
+        data.push_back( b * c.y );
+        data.push_back( b * c.z );
+        
         data.push_back( 255 );
     }
     stbi_write_png( string( "test.png" ).c_str(), 1000, 1000, 4, &data[ 0 ], 4000 );
