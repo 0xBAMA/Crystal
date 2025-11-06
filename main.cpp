@@ -406,7 +406,7 @@ void prepareOutput() {
 atomic_uintmax_t jobCounter { 0 };
 
 // threadpool setup
-constexpr int NUM_THREADS = 8;
+constexpr int NUM_THREADS = 72;
 bool threadFences[ NUM_THREADS ];
 bool threadKill;
 std::thread threads[ NUM_THREADS ];
@@ -448,12 +448,15 @@ int main () {
         // start with a "tetragonal", which will emphasize orientation because it has longer offsets along one axis
     // the angle is uniform, so we will leave this as just a nonuniformly scaled basis...
     const float xXx = 0.1618f;
-    const float yYy = 0.618f;
-    const float zZz = 0.618f;
+    const float yYy = 0.1618f;
+    const float zZz = 0.2f;
+
+    const mat4 rX = glm::rotate( mat4( 1.0f ), 0.1f, vec3( 1.0f ) );
+
     // note that 6 bonding points is in no way a constraint here
     bondingSiteOffsets = {
-        vec4( 0.0f, 0.0f, -zZz, 0.0f ),
-        vec4( 0.0f, 0.0f,  zZz, 0.0f ),
+        rX * vec4( 0.0f, 0.0f, -zZz, 0.0f ),
+        rX * vec4( 0.0f, 0.0f,  zZz, 0.0f ),
         vec4( 0.0f, -yYy, 0.0f, 0.0f ),
         vec4( 0.0f,  yYy, 0.0f, 0.0f ),
         vec4( -xXx, 0.0f, 0.0f, 0.0f ),
