@@ -313,8 +313,8 @@ void particleUpdate ( uintmax_t jobIndex ) {
 
             // the mat4 tells us the orientation and the position of the point
             // we have a very low chance to alter the orientation... jitter position, etc
-            if ( abs( jitter() < 0.01f ) ) {
-                closestBondingPointOffset += vec3( jitter(), jitter(), jitter() );
+            if ( pick() < 0.001f ) {
+                closestBondingPointOffset += 0.1f * vec3( jitter(), jitter(), jitter() );
                 closestPointTransform = glm::translate( glm::rotate( glm::translate( closestPointTransform, -closestPointTransformed ), jitter(), glm::normalize( vec3( jitter(), jitter(), jitter() ) ) ), closestPointTransformed );
             }
             
