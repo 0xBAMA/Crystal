@@ -383,10 +383,10 @@ void prepareOutput() {
     for ( int i = 0; i < ( 1000 * 1000 ); i++ ) {
         // some height term and a density term
         float h = binHeights[ i ] / 1000.0f;
-        float b = 255 * glm::pow( float( binCountsA[ i ] ) / float( maxCountA ), 0.8f );
-        // float b = 255.0f * int( binCountsA[ i ] != 0 );
-        
-        vec3 c = glm::mix( vec3( 1.0f, 0.5f, 0.0f ), vec3( 0.0f, 1.0f, 0.3f ), vec3( h ) );
+        // float b = ( binCountsA[ i ] == 0 ) ? 0 : ( 255 * glm::exp( -0.001f * float( binCountsA[ i ] ) / float( maxCountA ) ) );
+        float b = 255 * glm::pow( float( binCountsA[ i ] )  / float( maxCountA ), 0.8f );        
+
+        vec3 c = glm::mix( vec3( 1.0f ), vec3( 0.0f, 1.0f, 0.3f ), vec3( h ) );
 
         data.push_back( b * c.x );
         data.push_back( b * c.y );
