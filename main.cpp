@@ -162,8 +162,8 @@ CTSL::HashMap< ivec3, std::shared_ptr< gridCell > > anchoredParticles;
 // mutex anchoredParticlesGuard;
 
 // maintaining stats on the above container
-ivec3 minExtents = ivec3( -20, -20, -5 );
-ivec3 maxExtents = ivec3(  20, 20, 5 );
+ivec3 minExtents = ivec3( -1 );
+ivec3 maxExtents = ivec3( 1 );
 int numAnchored = 0;
 
 // get a point on the boundary
