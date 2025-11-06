@@ -10,10 +10,10 @@
 // A prime number as hash size gives a better distribution of values in buckets
 
 // jb: also this is sizing the underlying array so it will inform how quickly the linked lists grow... wider maybe better 
-// constexpr size_t HASH_SIZE_DEFAULT = 12207031;
+constexpr size_t HASH_SIZE_DEFAULT = 12207031;
 // constexpr size_t HASH_SIZE_DEFAULT = 6917;
 // constexpr size_t HASH_SIZE_DEFAULT = 56999;
-constexpr size_t HASH_SIZE_DEFAULT = 69001;
+// constexpr size_t HASH_SIZE_DEFAULT = 69001;
 
 namespace CTSL { // Concurrent Thread Safe Library
   // The class representing the hash map.
