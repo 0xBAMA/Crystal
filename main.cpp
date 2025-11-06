@@ -439,7 +439,7 @@ int main () {
     // cout << "Anchoring Initial Seed Particles.. ";
     rng pR( -2.0f, 2.0f );
     for ( int i = 0; i < 100; i++ ) {
-        mat4 transform = glm::translate( glm::rotate( identity, pR(), normalize( vec3( pR(), pR(), pR() ) ) ), 10.0f * vec3( pR(), pR(), pR() / 4.0f ) );
+        mat4 transform = glm::rotate( glm::translate( identity, 10.0f * vec3( jitter(), jitter(), 0.2f * jitter() ) ), pR(), glm::normalize( vec3( jitter(), jitter(), jitter() ) ) );
         anchorParticle( transform * p0, transform );
     }
     // cout << "Done." << endl;
