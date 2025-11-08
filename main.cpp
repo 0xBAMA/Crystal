@@ -147,7 +147,8 @@ struct gridCell {
     void Add( const mat4 &pTransform ) {
         // add it to the list... exclusive mutex is locked at this time
         std::unique_lock lock( mutex );
-        particles.push_back( pTransform );
+        if ( particles.size() < 128 )
+            particles.push_back( pTransform );
     }
 
     mat4 Get( const int &idx ) {
