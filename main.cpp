@@ -319,8 +319,8 @@ void particleUpdate ( uintmax_t jobIndex ) {
 
             // the mat4 tells us the orientation and the position of the point
             // we have a very low chance to alter the orientation... jitter position, etc
-            if ( pick() < 0.001f ) {
-                closestBondingPointOffset += 0.1f * vec3( jitter(), jitter(), jitter() );
+            if ( pick() < 0.01f ) {
+                closestBondingPointOffset += vec3( jitter(), jitter(), jitter() );
                 closestPointTransform = glm::translate( glm::rotate( glm::translate( closestPointTransform, -closestPointTransformed ), jitter(), glm::normalize( vec3( jitter(), jitter(), jitter() ) ) ), closestPointTransformed );
             }
             
@@ -494,7 +494,7 @@ int main () {
                     // Checkbox("Check me", &checked[0]),
                     // Checkbox("Check me", &checked[1]),
                     // Checkbox("Check me", &checked[2]),
-                    Slider( "Temperature", &temperature, 0.0f, 20.0f ),
+                    Slider( "Temperature", &temperature, 0.0f, 40.0f ),
                     Renderer( [&] ( bool focused ) {
                         auto c1 = color( Color::RGB( 255, 34, 0 ) );
                         auto c2 = color( Color::RGB( 255, 255, 34 ) );
