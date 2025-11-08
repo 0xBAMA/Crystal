@@ -444,8 +444,8 @@ int main () {
     // an initial point in the model, so we have something to bond to
     // cout << "Anchoring Initial Seed Particles.. ";
     rng pR( -2.0f, 2.0f );
-    for ( int i = 0; i < 100; i++ ) {
-        mat4 transform = glm::rotate( glm::translate( identity, 10.0f * vec3( jitter(), jitter(), 0.2f * jitter() ) ), pR(), glm::normalize( vec3( jitter(), jitter(), jitter() ) ) );
+    for ( int i = 0; i < 10; i++ ) {
+        mat4 transform = glm::rotate( glm::translate( identity, 10.0f * vec3( 2.0f * pick(), 2.0f * pick(), 0.1f * jitter() ) ), 10.0f * pR(), glm::normalize( vec3( jitter(), jitter(), jitter() ) ) );
         anchorParticle( transform * p0, transform );
     }
     // cout << "Done." << endl;
@@ -453,20 +453,24 @@ int main () {
     // we need to pick a set of offsets to use for the crystal growth...
         // start with a "tetragonal", which will emphasize orientation because it has longer offsets along one axis
     // the angle is uniform, so we will leave this as just a nonuniformly scaled basis...
-    const float xXx = 0.1618f;
-    const float yYy = 0.1618f;
-    const float zZz = 0.2f;
+    const float xXx = 0.3f;
+    const float yYy = 0.3f;
+    const float zZz = 0.1618f;
 
-    const mat4 rX = glm::rotate( mat4( 1.0f ), 0.1f, vec3( 1.0f ) );
+    const mat4 rX = glm::rotate( identity, -3.1415926535f / 3.0f, vec3( 0.0f, 1.0f, 0.0f ) );
+    const mat4 rY = identity;
+    const mat4 rZ = identity;
 
     // note that 6 bonding points is in no way a constraint here
     bondingSiteOffsets = {
-        rX * vec4( 0.0f, 0.0f, -zZz, 0.0f ),
-        rX * vec4( 0.0f, 0.0f,  zZz, 0.0f ),
-        vec4( 0.0f, -yYy, 0.0f, 0.0f ),
-        vec4( 0.0f,  yYy, 0.0f, 0.0f ),
-        vec4( -xXx, 0.0f, 0.0f, 0.0f ),
-        vec4(  xXx, 0.0f, 0.0f, 0.0f ),
+        // rX * vec4( 0.0f, 0.0f, -zZz, 0.0f ),
+        rX * vec4( 0.0f, 0.0f, zZz, 0.0f ),
+        rX * rX * vec4( 0.0f, 0.0f, zZz, 0.0f ),
+        rX * rX * rX * vec4( 0.0f, 0.0f, zZz, 0.0f ),
+        // rY * vec4( 0.0f, -yYy, 0.0f, 0.0f ),
+        rY * vec4( 0.0f, yYy, 0.0f, 0.0f ),
+        // rZ * vec4( -xXx, 0.0f, 0.0f, 0.0f ),
+        rZ * vec4( xXx, 0.0f, 0.0f, 0.0f ),
     };
     
     cout << "Spawning Reporter Thread.......... ";
