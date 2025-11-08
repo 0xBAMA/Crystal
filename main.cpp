@@ -295,13 +295,14 @@ void particleUpdate ( uintmax_t jobIndex ) {
         }
 
         // some additional bonding criteria...?
-        if ( closestPointDistance < 0.25f ) { // close enough... random hash... etc
+        if ( closestPointDistance < 1.5f ) { // close enough... random hash... etc
             // figure out which of bonding sites you want to bond to... probably the closest one of them
             vec3 closestBondingPointOffset;
             float closestBondingPointDistance = 10000.0f;
             
             // now looking at a list, find the closest...
             // cout << to_string( closestPointTransform ) << endl;
+#if 1
             for ( auto& bpo : bondingSiteOffsets ) {
                 vec4 transformedBondingPointOffset = closestPointTransform * bpo;
                 const float d = glm::distance( particle.xyz(), closestPointTransformed + transformedBondingPointOffset.xyz() );
@@ -310,7 +311,10 @@ void particleUpdate ( uintmax_t jobIndex ) {
                     closestBondingPointOffset = transformedBondingPointOffset.xyz();
                 }
             }
-
+#else
+            // just pick one at random...
+            closestBondingPointOffset = closestPointTransform * bondingSiteOffsets[ clamp( size_t( floor( pick() * bondingSiteOffsets.size() ) ), size_t( 0 ), bondingSiteOffsets.size() ) ];
+#endif
             // apply the offset to the particle, and the orientation from before....
 
             // the mat4 tells us the orientation and the position of the point
