@@ -434,9 +434,9 @@ int main () {
     // cout << "Spawning Particles................ ";
     for ( auto& p : particlePool ) {
         // respawnParticle( p );
-        p.x = remap( jitter(), 0.0f, 1.0f, -20.0f, 20.0f );
-        p.y = remap( jitter(), 0.0f, 1.0f, -20.0f, 20.0f );
-        p.z = remap( jitter(), 0.0f, 1.0f, -4.0f, 4.0f );
+        p.x = remap( pick(), 0.0f, 1.0f, -5.0f, 5.0f );
+        p.y = remap( pick(), 0.0f, 1.0f, -5.0f, 5.0f );
+        p.z = remap( pick(), 0.0f, 1.0f, -4.0f, 4.0f );
         p.w = 100.0f;
     }
     // cout << "Done." << endl;
