@@ -226,12 +226,13 @@ thread_local rngN jitter( 0.0f, 0.1f );
 vector< vec4 > bondingSiteOffsets;
 
 // the particles are the diffusion-limit mechanism
-constexpr int32_t NUM_PARTICLES = 10'000'000;
-// constexpr int32_t NUM_PARTICLES = 10'000;
+// constexpr int32_t NUM_PARTICLES = 10'000'000;
+constexpr int32_t NUM_PARTICLES = 1'000;
 
 vec4 particlePool[ NUM_PARTICLES ];
 void particleUpdate ( uintmax_t jobIndex ) {
-    thread_local const uintmax_t idx = jobIndex % NUM_PARTICLES;
+    // thread_local const uintmax_t idx = jobIndex % NUM_PARTICLES;
+    const uintmax_t idx = jobIndex % NUM_PARTICLES;
     vec4 &particle = std::ref( particlePool[ idx ] );
 
     // oob decrement + respawn logic
