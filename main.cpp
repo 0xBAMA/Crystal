@@ -451,7 +451,8 @@ void prepareOutputFrame () {
 
             const int idx = int( loc.x ) + imageWidth * int( loc.y ); 
             binCountsA[ idx ]++;
-            binHeights[ idx ] = max( clamp( remap( p.z, displayExtentsMin.z, displayExtentsMax.z, 0.0f, 1000.0f ), 0.0f, 999.0f ), binHeights[ idx ] );
+            // binHeights[ idx ] = max( clamp( remap( p.z, displayExtentsMin.z, displayExtentsMax.z, 0.0f, 1000.0f ), 0.0f, 999.0f ), binHeights[ idx ] );
+            binHeights[ idx ] = max( float( i ) / float( ptrCache ), binHeights[ idx ] );
             maxCountA = std::min( std::max( maxCountA, binCountsA[ idx ] ), int( 512 ) );
         }
     }
