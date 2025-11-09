@@ -519,14 +519,6 @@ std::thread threads[ NUM_THREADS ];
 #include "reporter.h" // proc filesystem reading
 //=================================================================================================
 int main () {
-    // init gif writing
-    GifWriter g;
-	auto now = std::chrono::system_clock::now();
-	auto inTime_t = std::chrono::system_clock::to_time_t( now );
-	std::stringstream ssA;
-	ssA << std::put_time( std::localtime( &inTime_t ), "Crystal-%Y-%m-%d at %H-%M-%S.gif" );
-	GifBegin( &g, ssA.str().c_str() , imageWidth, imageHeight, gifDelay );
-    
     // pump initial proc data
     updateProcData();
     updateProcData();
@@ -545,7 +537,7 @@ int main () {
     cout << "Done." << endl;
 
     cout << "Spawning Pointer Pool... ";
-    for ( int i = 0; i < 10000000; i++ ) {
+    for ( int i = 0; i < 20000000; i++ ) {
         pointerPool.push_back( make_shared< mat4 >() );        
     }
     cout << "Done." << endl;
@@ -674,20 +666,22 @@ int main () {
             // while ( !quit ) {
                screen.RequestAnimationFrame();
                loop.RunOnce();
-               sleep_for( 100ms );
+               sleep_for( 100ms ); 
 
-               static uintmax_t lastObserved = 0;
-               static uintmax_t lastObservedAccum = 0;
-               lastObservedAccum += numAnchored - lastObserved;
-               lastObserved = numAnchored;
-               if ( lastObservedAccum > 5000 ) {
-                   prepareOutputGIFFrame( &g );
-                   lastObservedAccum = 0;
-                   if ( gifFrame > 600 || pointerPoolAllocator > 15000000 ) {
-                       quit = true;
-                   }
-                   cout << "finished " << gifFrame << endl;
-               }
+               if ( pointerPoolAllocator > 5000000 ) quit = true;
+
+               // static uintmax_t lastObserved = 0;
+               // static uintmax_t lastObservedAccum = 0;
+               // lastObservedAccum += numAnchored - lastObserved;
+               // lastObserved = numAnchored;
+               // if ( lastObservedAccum > 5000 ) {
+                   // prepareOutputGIFFrame( &g );
+                   // lastObservedAccum = 0;
+                   // if ( gifFrame > 600 || pointerPoolAllocator > 15000000 ) {
+                       // quit = true;
+                   // }
+                   // cout << "finished " << gifFrame << endl;
+               // }
 
                // terminate condition:
                // if (  ) {
@@ -749,12 +743,28 @@ int main () {
     reporterThread.join();
     cout << "Terminating....................... Done." << endl;
 
-    // save the data out, bake out a preview or whatever for now...
-    int outputRotationSteps = 100;
-    for ( int i = 0; i < outputRotationSteps; i++ ) {
-        cout << "prepping output rotation: " << i << " / " << outputRotationSteps << endl;
+    cout << "Rendering Animation... ";
+    // init gif writing
+    GifWriter g;
+	auto now = std::chrono::system_clock::now();
+	auto inTime_t = std::chrono::system_clock::to_time_t( now );
+	std::stringstream ssA;
+	ssA << std::put_time( std::localtime( &inTime_t ), "Crystal-%Y-%m-%d at %H-%M-%S.gif" );
+	GifBegin( &g, ssA.str().c_str() , imageWidth, imageHeight, gifDelay );
+
+    const uintmax_t ptrAllocateCache = pointerPoolAllocator;
+    for ( int i = 5000; i < ptrAllocateCache; i += 5000 ) {
+        pointerPoolAllocator = i;
         prepareOutputGIFFrame( &g );
     }
+    cout << "Done." << endl;
+
+    // save the data out, bake out a preview or whatever for now...
+    // int outputRotationSteps = 5;
+    // for ( int i = 0; i < outputRotationSteps; i++ ) {
+        // cout << "prepping output rotation: " << i << " / " << outputRotationSteps << endl;
+        // prepareOutputGIFFrame( &g );
+    // }
     GifEnd( &g );
     prepareOutputScreenshot();
 
