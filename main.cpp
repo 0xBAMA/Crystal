@@ -324,7 +324,7 @@ void particleUpdate ( uintmax_t jobIndex ) {
         }
 
         // some additional bonding criteria...?
-        if ( closestPointDistance < 1.5f ) { // close enough... random hash... etc
+        if ( closestPointDistance < 0.5f ) { // close enough... random hash... etc
             // figure out which of bonding sites you want to bond to... probably the closest one of them
             vec3 closestBondingPointOffset;
             float closestBondingPointDistance = 10000.0f;
@@ -348,9 +348,9 @@ void particleUpdate ( uintmax_t jobIndex ) {
 
             // the mat4 tells us the orientation and the position of the point
             // we have a very low chance to alter the orientation... jitter position, etc
-            if ( pick() < 0.01f ) {
+            if ( pick() < 0.0005f ) {
                 closestBondingPointOffset += vec3( jitter(), jitter(), jitter() );
-                closestPointTransform = glm::translate( glm::rotate( glm::translate( closestPointTransform, -closestPointTransformed ), jitter(), glm::normalize( vec3( jitter(), jitter(), jitter() ) ) ), closestPointTransformed );
+                closestPointTransform = glm::translate( glm::rotate( glm::translate( closestPointTransform, -closestPointTransformed ), 100.0f * jitter(), glm::normalize( vec3( jitter(), jitter(), jitter() ) ) ), closestPointTransformed );
             }
             
             const vec4 TvX = closestPointTransform * vX;
