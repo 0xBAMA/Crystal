@@ -194,14 +194,19 @@ int numAnchored = 0;
 
 // get a point on the boundary
 thread_local rng pick( 0.0f, 1.0f );
+float temperature = 2.0f;
+thread_local rngN jitter( 0.0f, 0.1f );
+
 void respawnParticle ( vec4 &p ) {
-    const bool face = ( pick() < 0.5f );
-    constexpr float margin = 0.0f;
+    // const bool face = ( pick() < 0.5f );
+    const bool face = true;
+    constexpr float margin = 5.0f;
     p.x = glm::mix( minExtents.x - margin, maxExtents.x + margin, pick() );
     p.y = glm::mix( minExtents.y - margin, maxExtents.y + margin, pick() );
     p.z = glm::mix( minExtents.z - margin, maxExtents.z + margin, pick() );
 
-    switch ( int( std::floor( pick() * 3.01f ) ) ) {
+    switch ( 3 + int( std::floor( pick() * 10.0f ) ) ) {
+    // switch ( 0 ) {
         // we will be on one of the parallel x faces, flatten
         case 0: p.x = face ? minExtents.x - margin : maxExtents.x + margin; break;
 
