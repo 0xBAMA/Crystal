@@ -568,12 +568,14 @@ int main () {
             auto screen = ScreenInteractive::FixedSize( 80, 30 );
             auto ftxDAG = CatchEvent( window_container, [&]( Event event ) {
                 if ( event == Event::Character('q') ) {
+                    // save out the gif
+                    // GifEnd( &g );
                     screen.ExitLoopClosure()();
                     return true;
                 }
 
                 if ( event == Event::Character('w') ) {
-                    prepareOutput();
+                    prepareOutputScreenshot();
                     return true;
                 }
 
@@ -581,16 +583,30 @@ int main () {
             });
 
         // "main loop"
-            // cout << "Entering Main Loop..." << endl;
+            cout << "Entering Main Loop..." << endl;
             ftxui::Loop loop( &screen, ftxDAG );
-            while (!loop.HasQuitted() ) {
+            bool quit = false;
+            while ( !loop.HasQuitted() && !quit ) {
+            // while ( !quit ) {
                screen.RequestAnimationFrame();
                loop.RunOnce();
                sleep_for( 100ms );
 
+               static uintmax_t lastObserved = 0;
+               static uintmax_t lastObservedAccum = 0;
+               lastObservedAccum += numAnchored - lastObserved;
+               lastObserved = numAnchored;
+               if ( lastObservedAccum > 5000 ) {
+                   prepareOutputGIFFrame( &g );
+                   lastObservedAccum = 0;
+                   if ( gifFrame > 600 || points.size() > 15000000 ) {
+                       quit = true;
+                   }
+                   cout << "finished " << gifFrame << endl;
+               }
+
                // terminate condition:
                // if (  ) {
-                   // screen.ExitLoopClosure()();
                // }
             }
 
