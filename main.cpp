@@ -650,7 +650,13 @@ int main () {
     cout << "Terminating....................... Done." << endl;
 
     // save the data out, bake out a preview or whatever for now...
-    prepareOutput();
+    int outputRotationSteps = 400;
+    for ( int i = 0; i < outputRotationSteps; i++ ) {
+        cout << "prepping output rotation: " << i << " / " << outputRotationSteps << endl;
+        prepareOutputGIFFrameNoPrep( &g );
+    }
+    GifEnd( &g );
+    prepareOutputScreenshot();
 
 	return 0;
 }
