@@ -274,10 +274,11 @@ void particleUpdate ( uintmax_t jobIndex ) {
         }
     }
 
-    // move the particle slightly
-    particle.x += temperature * jitter();
-    particle.y += temperature * jitter();
-    particle.z += temperature * jitter();
+    // move the particle slightly... small change each update
+    constexpr vec3 staticFlow = vec3( 0.0f, 0.0f, 0.0f );
+    thread_local vec4 flowVector = vec4( ( 1.0f + 0.3f * pick() ) * glm::normalize( vec3( jitter(), jitter(), jitter() ) ), 0.0f );
+    flowVector = glm::rotate( identity, jitter(), glm::normalize( vec3( jitter(), jitter(), jitter() ) ) ) * v0;
+    particle += vec4( temperature * vec3( jitter(), jitter(), jitter() ) + pick() * flowVector.xyz() + staticFlow, 0.0f );
 
     // are we going to bond to something? is there a nearby anchored particle?
     // first, let's look at all the particles in the local neighborhood...
