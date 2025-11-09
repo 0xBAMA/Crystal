@@ -114,6 +114,31 @@ namespace std {
 //=================================================================================================
 #include "hashMap/inc/HashMap.h"
 //=================================================================================================
+#include "gif.h" // gif output lib - https://github.com/charlietangora/gif-h
+/* Basic Usage:
+
+#include <vector>
+#include <cstdint>
+#include <gif.h>
+int main()
+{
+	int width = 100;
+	int height = 200;
+	std::vector<uint8_t> black(width * height * 4, 0);
+	std::vector<uint8_t> white(width * height * 4, 255);
+
+	auto fileName = "bwgif.gif";
+	int delay = 100;
+	GifWriter g;
+	GifBegin(&g, fileName, width, height, delay);
+	GifWriteFrame(&g, black.data(), width, height, delay);
+	GifWriteFrame(&g, white.data(), width, height, delay);
+	GifEnd(&g);
+
+	return 0;
+} */
+//=================================================================================================
+
 
 // going to use this as a threshold for a kind of "bonding affinity"... may need more detail here than 1 degree of freedom
 // float transformSimilarity ( const particle_t &a, const particle_t &b ) const {
