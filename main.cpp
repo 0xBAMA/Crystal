@@ -369,11 +369,28 @@ void particleUpdate ( uintmax_t jobIndex ) {
     }
 }
 //=================================================================================================
-void prepareOutput() {
-       // create a linear buffer of all the point locations in minimum representation
-    size_t maxSize = 0;
-    vector< vec3 > points;
-    points.reserve( numAnchored );
+int gifFrame = 0;
+const int gifDelay = 4;
+const int imageWidth = 1280;
+const int imageHeight = 720;
+std::vector< uint8_t > data;
+
+int binCountsA[ imageWidth * imageHeight ];
+float binHeights[ imageWidth * imageHeight ];
+
+void clearBuffers () {
+    for ( auto& c : binCountsA )
+        c = 0;
+
+    for ( auto& h : binHeights )
+        h = 0;
+}
+
+size_t maxSize = 0;
+vector< vec3 > points;
+void prepareOutputList () {
+    points.clear();
+    points.reserve( numAnchored );    
     {
         // lock_guard< mutex > lock( anchoredParticlesGuard );
         for ( int x = minExtents.x; x < maxExtents.x; x++ ) {
@@ -390,52 +407,117 @@ void prepareOutput() {
             }
         }
     }
+}
 
+void prepareOutputFrame () {
+    static ivec3 displayExtentsMin = minExtents - ivec3( 5 );
+    displayExtentsMin = ivec3( glm::mix( vec3( displayExtentsMin ), vec3( minExtents ) - vec3( 5.0f ), 0.5f ) );
 
-    // information about anchored particles
-    int binCountsA[ 1000 * 1000 ];
-    float binHeights[ 1000 * 1000 ];
+    static ivec3 displayExtentsMax = maxExtents + ivec3( 5 );
+    displayExtentsMax = ivec3( glm::mix( vec3( displayExtentsMax ), vec3( maxExtents ) + vec3( 5.0f ), 0.5f ) );
+
+    static ivec3 midPoint = ( displayExtentsMin + displayExtentsMax ) / 2;
+    midPoint = ivec3( glm::mix( vec3( midPoint ), vec3( displayExtentsMin + displayExtentsMax ) / 2.0f, 0.5f ) );
+
+    const ivec3 spans = maxExtents - minExtents;
+    const int maxSpan = max( max( spans.x, spans.y ), spans.z );
+    const ivec3 delta = ivec3( maxSpan ) - spans;
+    displayExtentsMin -= delta;
+    displayExtentsMax += delta;
+    
+    // restore prior values of z for color stuff
+    displayExtentsMin.z = minExtents.z;
+    displayExtentsMax.z = maxExtents.z;
 
     int maxCountA = 0;
     int nonzeroBinsA = 0;
     for ( auto& b : binCountsA ) { b = 0; }
     for ( auto& p : points ) {
+        vec3 pT = glm::translate( glm::rotate( glm::translate( identity, -vec3( midPoint ) ), 0.01618f * gifFrame, glm::normalize( vec3( 1.0f, 0.1f, 0.3f ) ) ), vec3( midPoint ) ) * vec4( p, 1.0f );
         vec3 loc = vec3(
-            clamp( remap( p.x, minExtents.x, maxExtents.x, 0.0f, 1000.0f ), 0.0f, 999.0f ),
-            clamp( remap( p.y, minExtents.y, maxExtents.y, 0.0f, 1000.0f ), 0.0f, 999.0f ),
-            clamp( remap( p.z, minExtents.z, maxExtents.z, 0.0f, 1000.0f ), 0.0f, 999.0f )
+            remap( pT.x, displayExtentsMin.x, displayExtentsMax.x, 0.0f, imageWidth * ( float( imageHeight ) / float( imageWidth ) ) ) + imageWidth / 4.0f,
+            remap( pT.y, displayExtentsMin.y, displayExtentsMax.y, 0.0f, imageHeight ),
+            remap( pT.z, displayExtentsMin.z, displayExtentsMax.z, 0.0f, 1000.0f )
         );
-        const int idx = int( loc.x ) + 1000 * int( loc.y ); 
-        binCountsA[ idx ]++;
-        binHeights[ idx ] = max( loc.z, binHeights[ idx ] );
-        maxCountA = max( maxCountA, binCountsA[ idx ] );
+
+        // const int blackBarOffset = int( ( ( 21.0f / 9.0f ) - ( float( imageWidth ) / float( imageHeight ) ) / 2.0f ) * imageHeight );
+        // if ( glm::all( glm::lessThan( loc.xy(), vec2( imageWidth, imageHeight - blackBarOffset ) ) ) &&
+            // glm::all( glm::greaterThanEqual( loc.xy(), vec2( 0, blackBarOffset ) ) ) ) {
+
+        constexpr float ratio = ( 21.0f / 9.0f );
+        vec2 uv = ( loc.xy() ) / vec2( imageWidth, imageHeight );
+
+        // const int blackBarOffset = int( min( ratio, float( imageWidth ) / float( imageHeight ) ) * float( imageHeight ) ) / 2;
+        if ( glm::all( glm::lessThan( uv, vec2( 1, 1.0f - 0.5f / ratio ) ) ) &&
+            glm::all( glm::greaterThan( uv, vec2( 0, 0.5f / ratio ) ) ) ) {
+
+            const int idx = int( loc.x ) + imageWidth * int( loc.y ); 
+            binCountsA[ idx ]++;
+            binHeights[ idx ] = max( clamp( remap( p.z, displayExtentsMin.z, displayExtentsMax.z, 0.0f, 1000.0f ), 0.0f, 999.0f ), binHeights[ idx ] );
+            maxCountA = std::min( std::max( maxCountA, binCountsA[ idx ] ), int( 512 ) );
+        }
     }
 
     cout << "processed " << points.size() << " particles" << endl;
     cout << "found max " << maxCountA << " points per bin" << endl;
+
     // write out the image
-    std::vector< uint8_t > data;
-    for ( int i = 0; i < ( 1000 * 1000 ); i++ ) {
+    data.clear();
+    data.reserve( 4 * imageWidth * imageHeight );
+    for ( int i = 0; i < ( imageWidth * imageHeight ); i++ ) {
         // some height term and a density term
         float h = binHeights[ i ] / 1000.0f;
+
         // float b = ( binCountsA[ i ] == 0 ) ? 0 : ( 255 * glm::exp( -0.001f * float( binCountsA[ i ] ) / float( maxCountA ) ) );
         float b = 255 * glm::pow( float( binCountsA[ i ] )  / float( maxCountA ), 0.8f );        
 
-        vec3 c = glm::mix( vec3( 1.0f ), vec3( 0.0f, 1.0f, 0.3f ), vec3( h ) );
+        vec3 c = glm::mix( vec3( 1.0f ), vec3( 1.0f, 0.1f, 0.1f ), vec3( h ) );
 
-        data.push_back( b * c.x );
-        data.push_back( b * c.y );
-        data.push_back( b * c.z );
+        data.push_back( std::clamp( uint( b * c.x ), 0u, 255u ) );
+        data.push_back( std::clamp( uint( b * c.y ), 0u, 255u ) );
+        data.push_back( std::clamp( uint( b * c.z ), 0u, 255u ) );
         
         data.push_back( 255 );
     }
+}
+
+void prepareOutputScreenshot () {
+    // create a linear buffer of all the point locations in minimum representation... this has a lot of room for optimization...
+        // writing an allocating layer out of a pool of shared_ptrs() may be faster? and will allow me to actually encode the
+        // specific order in which all the particles were bound to the crystal. They will be allocated in the order they bond,
+        // which means that this does a couple things: first, I can playback the process... second, I have this information
+        // precomputed, so that we don't have to do this iteration over the hashmap first.
+        
+    prepareOutputList();
+    clearBuffers();
+    prepareOutputFrame();
 
 	auto now = std::chrono::system_clock::now();
 	auto inTime_t = std::chrono::system_clock::to_time_t( now );
 	std::stringstream ssA;
 	ssA << std::put_time( std::localtime( &inTime_t ), "Crystal-%Y-%m-%d at %H-%M-%S.png" );
-    stbi_write_png( ssA.str().c_str(), 1000, 1000, 4, &data[ 0 ], 4000 );
+    stbi_write_png( ssA.str().c_str(), imageWidth, imageHeight, 4, &data[ 0 ], 4 * imageWidth );
 }
+
+void prepareOutputGIFFrame( GifWriter *g ) {   
+
+    prepareOutputList();
+    clearBuffers();
+    prepareOutputFrame();
+
+    GifWriteFrame( g, data.data(), imageWidth, imageHeight, gifDelay );
+    gifFrame++;
+}
+
+// for once the crystal is finished
+void prepareOutputGIFFrameNoPrep( GifWriter *g ) {   
+    clearBuffers();
+    prepareOutputFrame();
+
+    GifWriteFrame( g, data.data(), imageWidth, imageHeight, gifDelay );
+    gifFrame++;
+}
+
 //=================================================================================================
 // for dispatching particle updates
 atomic_uintmax_t jobCounter { 0 };
