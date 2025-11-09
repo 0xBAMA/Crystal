@@ -409,27 +409,6 @@ void clearBuffers () {
 }
 
 size_t maxSize = 0;
-// vector< vec3 > points;
-void prepareOutputList () {
-    // points.clear();
-    // points.reserve( numAnchored );    
-    // {
-        // lock_guard< mutex > lock( anchoredParticlesGuard );
-        // for ( int x = minExtents.x; x < maxExtents.x; x++ ) {
-            // for ( int y = minExtents.y; y < maxExtents.y; y++ ) {
-                // for ( int z = minExtents.z; z < maxExtents.z; z++ ) {
-                    // if ( shared_ptr< gridCell > gcp; anchoredParticles.find( ivec3( x, y, z ), gcp ) ) {
-                        // maxSize = max( maxSize, gcp->particles.size() );
-                        // for ( auto& p : gcp->particles ) {
-                            // vec3 pT = ( p.get() * p0 ).xyz();
-                            // points.push_back( pT );
-                        // }
-                    // }
-                // }
-            // }
-        // }
-    // }
-}
 
 void prepareOutputFrame () {
     static ivec3 displayExtentsMin = minExtents - ivec3( 5 );
@@ -464,14 +443,9 @@ void prepareOutputFrame () {
             remap( pT.z, displayExtentsMin.z, displayExtentsMax.z, 0.0f, 1000.0f )
         );
 
-        // const int blackBarOffset = int( ( ( 21.0f / 9.0f ) - ( float( imageWidth ) / float( imageHeight ) ) / 2.0f ) * imageHeight );
-        // if ( glm::all( glm::lessThan( loc.xy(), vec2( imageWidth, imageHeight - blackBarOffset ) ) ) &&
-            // glm::all( glm::greaterThanEqual( loc.xy(), vec2( 0, blackBarOffset ) ) ) ) {
-
         constexpr float ratio = ( 21.0f / 9.0f );
         const vec2 uv = ( loc.xy() ) / vec2( imageWidth, imageHeight );
 
-        // const int blackBarOffset = int( min( ratio, float( imageWidth ) / float( imageHeight ) ) * float( imageHeight ) ) / 2;
         if ( glm::all( glm::lessThan( uv, vec2( 1, 1.0f - 0.5f / ratio ) ) ) &&
             glm::all( glm::greaterThan( uv, vec2( 0, 0.5f / ratio ) ) ) ) {
 
@@ -483,7 +457,7 @@ void prepareOutputFrame () {
     }
 
     cout << "processed " << ptrCache << " particles" << endl;
-    cout << "found max " << maxCountA << " points per bin" << endl;
+    cout << "found max " << maxCountA << " points per screen bin" << endl;
 
     // write out the image
     data.clear();
@@ -512,7 +486,6 @@ void prepareOutputScreenshot () {
         // which means that this does a couple things: first, I can playback the process... second, I have this information
         // precomputed, so that we don't have to do this iteration over the hashmap first.
         
-    prepareOutputList();
     clearBuffers();
     prepareOutputFrame();
 
@@ -525,16 +498,6 @@ void prepareOutputScreenshot () {
 
 void prepareOutputGIFFrame( GifWriter *g ) {   
 
-    prepareOutputList();
-    clearBuffers();
-    prepareOutputFrame();
-
-    GifWriteFrame( g, data.data(), imageWidth, imageHeight, gifDelay );
-    gifFrame++;
-}
-
-// for once the crystal is finished
-void prepareOutputGIFFrameNoPrep( GifWriter *g ) {   
     clearBuffers();
     prepareOutputFrame();
 
@@ -789,7 +752,7 @@ int main () {
     int outputRotationSteps = 100;
     for ( int i = 0; i < outputRotationSteps; i++ ) {
         cout << "prepping output rotation: " << i << " / " << outputRotationSteps << endl;
-        prepareOutputGIFFrameNoPrep( &g );
+        prepareOutputGIFFrame( &g );
     }
     GifEnd( &g );
     prepareOutputScreenshot();
