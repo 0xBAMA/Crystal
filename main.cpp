@@ -216,13 +216,13 @@ void respawnParticle ( vec4 &p ) {
         // z faces
         case 2: p.z = face ? minExtents.z - margin : maxExtents.z + margin; break;
 
-        // won't hit much, but will be uniform random spawn if you do
+        // won't hit much (can use this intentionally), but will be uniform random spawn if you do
         default:
             break;
     }
 
     // the .w will be a counter... it is decremented any update during which it is outide the current bounding volume
-    p.w = 100.0f; // I think this is a nice mechanism - it can wander, but in a bounded way - when it hits zero, respawn
+    p.w = 69.0f; // I think this is a nice mechanism - it can wander, but in a bounded way - when it hits zero, respawn
 }
 
 void anchorParticle ( const ivec3 iP, const mat4 &pTransform ) {
@@ -249,8 +249,6 @@ void anchorParticle ( const ivec3 iP, const mat4 &pTransform ) {
 }
 
 // this is the update, operating on a particular particle
-float temperature = 5.0f;
-thread_local rngN jitter( 0.0f, 0.1f );
 
 // these are the bonding sites
 vector< vec4 > bondingSiteOffsets;
