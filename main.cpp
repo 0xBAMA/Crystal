@@ -154,13 +154,27 @@ float remap ( float in, float aL, float aH, float bL, float bH ) {
     return bL + ( in - aL ) * ( bH - bL ) / ( aH - aL );
 }
 
+const int pointerAllocatorChunk = 1000000;
+vector< shared_ptr< mat4 > > pointerPool;
+atomic_uintmax_t pointerPoolAllocator;
+mutex pointerPoolGuard;
+uintmax_t getPointerIndex () {
+    {
+        lock_guard< mutex > lock( pointerPoolGuard );
+        if ( pointerPool.size() - pointerPoolAllocator < 1000 ) {
+            pointerPool.resize( pointerPool.size() + pointerAllocatorChunk );
+        }
+    }
+    return pointerPoolAllocator.fetch_add( 1 );
+}
+
 struct gridCell {
-    vector< mat4 > particles;
+    vector< shared_ptr< mat4 > > particles;
     std::shared_mutex mutex;
 
     gridCell() {
         particles.resize( 0 );
-        particles.reserve( 16 );
+        particles.reserve( 128 );
     }
 
     size_t GetCount () {
@@ -172,11 +186,20 @@ struct gridCell {
     void Add( const mat4 &pTransform ) {
         // add it to the list... exclusive mutex is locked at this time
         std::unique_lock lock( mutex );
-        if ( particles.size() < 128 )
-            particles.push_back( pTransform );
+        if ( particles.size() < 128 ) {
+            // get a new pointer...
+            uintmax_t ptrIdx = getPointerIndex();
+
+            // using the input argument, fill out the data
+            shared_ptr< mat4 > ptr = pointerPool[ ptrIdx ];
+            *ptr = pTransform;
+
+            // pushing the pointer onto the list
+            particles.push_back( ptr );
+        }
     }
 
-    mat4 Get( const int &idx ) {
+    shared_ptr< mat4 > Get( const int &idx ) {
         // locking the non-exclusive read mutex
         std::shared_lock lock( mutex );
         return particles[ idx ];
@@ -185,7 +208,6 @@ struct gridCell {
 
 // the list of particles which have been anchored
 CTSL::HashMap< ivec3, std::shared_ptr< gridCell > > anchoredParticles;
-// mutex anchoredParticlesGuard;
 
 // maintaining stats on the above container
 ivec3 minExtents = ivec3( -1 );
@@ -297,7 +319,7 @@ void particleUpdate ( uintmax_t jobIndex ) {
             // we have located a cell which contains particles...
             const size_t count = gcp->GetCount();
             for ( int i = 0; i < count; i++ ) {
-                nearbyPoints.push_back( gcp->Get( i ) );
+                nearbyPoints.push_back( *gcp->Get( i ) ) ;
             }
         } // else we did not find any contents here
     }
@@ -387,26 +409,26 @@ void clearBuffers () {
 }
 
 size_t maxSize = 0;
-vector< vec3 > points;
+// vector< vec3 > points;
 void prepareOutputList () {
-    points.clear();
-    points.reserve( numAnchored );    
-    {
+    // points.clear();
+    // points.reserve( numAnchored );    
+    // {
         // lock_guard< mutex > lock( anchoredParticlesGuard );
-        for ( int x = minExtents.x; x < maxExtents.x; x++ ) {
-            for ( int y = minExtents.y; y < maxExtents.y; y++ ) {
-                for ( int z = minExtents.z; z < maxExtents.z; z++ ) {
-                    if ( shared_ptr< gridCell > gcp; anchoredParticles.find( ivec3( x, y, z ), gcp ) ) {
-                        maxSize = max( maxSize, gcp->particles.size() );
-                        for ( auto& p : gcp->particles ) {
-                            vec3 pT = ( p * p0 ).xyz();
-                            points.push_back( pT );
-                        }
-                    }
-                }
-            }
-        }
-    }
+        // for ( int x = minExtents.x; x < maxExtents.x; x++ ) {
+            // for ( int y = minExtents.y; y < maxExtents.y; y++ ) {
+                // for ( int z = minExtents.z; z < maxExtents.z; z++ ) {
+                    // if ( shared_ptr< gridCell > gcp; anchoredParticles.find( ivec3( x, y, z ), gcp ) ) {
+                        // maxSize = max( maxSize, gcp->particles.size() );
+                        // for ( auto& p : gcp->particles ) {
+                            // vec3 pT = ( p.get() * p0 ).xyz();
+                            // points.push_back( pT );
+                        // }
+                    // }
+                // }
+            // }
+        // }
+    // }
 }
 
 void prepareOutputFrame () {
@@ -431,10 +453,12 @@ void prepareOutputFrame () {
 
     int maxCountA = 0;
     int nonzeroBinsA = 0;
+    const uintmax_t ptrCache = pointerPoolAllocator; 
     for ( auto& b : binCountsA ) { b = 0; }
-    for ( auto& p : points ) {
-        vec3 pT = glm::translate( glm::rotate( glm::translate( identity, -vec3( midPoint ) ), 0.01618f * gifFrame, glm::normalize( vec3( 1.0f, 0.1f, 0.3f ) ) ), vec3( midPoint ) ) * vec4( p, 1.0f );
-        vec3 loc = vec3(
+    for ( uintmax_t i = 0; i < ptrCache; i++ ) {
+        const vec3 p = ( *pointerPool[ i ] * p0 ).xyz();
+        const vec3 pT = glm::translate( glm::rotate( glm::translate( identity, -vec3( midPoint ) ), 0.01618f * gifFrame, glm::normalize( vec3( 1.0f, 0.1f, 0.3f ) ) ), vec3( midPoint ) ) * vec4( p, 1.0f );
+        const vec3 loc = vec3(
             remap( pT.x, displayExtentsMin.x, displayExtentsMax.x, 0.0f, imageWidth * ( float( imageHeight ) / float( imageWidth ) ) ) + imageWidth / 4.0f,
             remap( pT.y, displayExtentsMin.y, displayExtentsMax.y, 0.0f, imageHeight ),
             remap( pT.z, displayExtentsMin.z, displayExtentsMax.z, 0.0f, 1000.0f )
@@ -445,7 +469,7 @@ void prepareOutputFrame () {
             // glm::all( glm::greaterThanEqual( loc.xy(), vec2( 0, blackBarOffset ) ) ) ) {
 
         constexpr float ratio = ( 21.0f / 9.0f );
-        vec2 uv = ( loc.xy() ) / vec2( imageWidth, imageHeight );
+        const vec2 uv = ( loc.xy() ) / vec2( imageWidth, imageHeight );
 
         // const int blackBarOffset = int( min( ratio, float( imageWidth ) / float( imageHeight ) ) * float( imageHeight ) ) / 2;
         if ( glm::all( glm::lessThan( uv, vec2( 1, 1.0f - 0.5f / ratio ) ) ) &&
@@ -458,7 +482,7 @@ void prepareOutputFrame () {
         }
     }
 
-    cout << "processed " << points.size() << " particles" << endl;
+    cout << "processed " << ptrCache << " particles" << endl;
     cout << "found max " << maxCountA << " points per bin" << endl;
 
     // write out the image
@@ -553,6 +577,12 @@ int main () {
     cout << "Spawning Particles... ";
     for ( auto& p : particlePool ) {
         respawnParticle( p );
+    }
+    cout << "Done." << endl;
+
+    cout << "Spawning Pointer Pool... ";
+    for ( int i = 0; i < 10000000; i++ ) {
+        pointerPool.push_back( make_shared< mat4 >() );        
     }
     cout << "Done." << endl;
 
@@ -689,7 +719,7 @@ int main () {
                if ( lastObservedAccum > 5000 ) {
                    prepareOutputGIFFrame( &g );
                    lastObservedAccum = 0;
-                   if ( gifFrame > 600 || points.size() > 15000000 ) {
+                   if ( gifFrame > 600 || pointerPoolAllocator > 15000000 ) {
                        quit = true;
                    }
                    cout << "finished " << gifFrame << endl;
@@ -756,7 +786,7 @@ int main () {
     cout << "Terminating....................... Done." << endl;
 
     // save the data out, bake out a preview or whatever for now...
-    int outputRotationSteps = 400;
+    int outputRotationSteps = 100;
     for ( int i = 0; i < outputRotationSteps; i++ ) {
         cout << "prepping output rotation: " << i << " / " << outputRotationSteps << endl;
         prepareOutputGIFFrameNoPrep( &g );
