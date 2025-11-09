@@ -161,7 +161,7 @@ mutex pointerPoolGuard;
 uintmax_t getPointerIndex () {
     {
         lock_guard< mutex > lock( pointerPoolGuard );
-        if ( pointerPool.size() - pointerPoolAllocator < 1000 ) {
+        if ( pointerPool.size() - pointerPoolAllocator < pointerAllocatorChunk ) {
             pointerPool.resize( pointerPool.size() + pointerAllocatorChunk );
         }
     }
@@ -465,7 +465,7 @@ void prepareOutputFrame () {
     data.reserve( 4 * imageWidth * imageHeight );
     for ( int i = 0; i < ( imageWidth * imageHeight ); i++ ) {
         // some height term and a density term
-        float h = binHeights[ i ] / 1000.0f;
+        float h = binHeights[ i ];
 
         // float b = ( binCountsA[ i ] == 0 ) ? 0 : ( 255 * glm::exp( -0.001f * float( binCountsA[ i ] ) / float( maxCountA ) ) );
         float b = 255 * glm::pow( float( binCountsA[ i ] )  / float( maxCountA ), 0.8f );        
