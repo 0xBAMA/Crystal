@@ -531,6 +531,14 @@ std::thread threads[ NUM_THREADS ];
 #include "reporter.h" // proc filesystem reading
 //=================================================================================================
 int main () {
+    // init gif writing
+    GifWriter g;
+	auto now = std::chrono::system_clock::now();
+	auto inTime_t = std::chrono::system_clock::to_time_t( now );
+	std::stringstream ssA;
+	ssA << std::put_time( std::localtime( &inTime_t ), "Crystal-%Y-%m-%d at %H-%M-%S.gif" );
+	GifBegin( &g, ssA.str().c_str() , imageWidth, imageHeight, gifDelay );
+    
     // pump initial proc data
     updateProcData();
     updateProcData();
@@ -542,46 +550,41 @@ int main () {
         fence = true;
 
     // we need to make sure there are particles to update...
-    // cout << "Spawning Particles................ ";
+    cout << "Spawning Particles... ";
     for ( auto& p : particlePool ) {
-        // respawnParticle( p );
-        p.x = remap( pick(), 0.0f, 1.0f, -5.0f, 5.0f );
-        p.y = remap( pick(), 0.0f, 1.0f, -5.0f, 5.0f );
-        p.z = remap( pick(), 0.0f, 1.0f, -4.0f, 4.0f );
-        p.w = 100.0f;
+        respawnParticle( p );
     }
-    // cout << "Done." << endl;
+    cout << "Done." << endl;
 
     // an initial point in the model, so we have something to bond to
-    // cout << "Anchoring Initial Seed Particles.. ";
+    cout << "Anchoring Initial Seed Particles... ";
     rng pR( -2.0f, 2.0f );
     for ( int i = 0; i < 10; i++ ) {
-        mat4 transform = glm::rotate( glm::translate( identity, 10.0f * vec3( 2.0f * pick(), 2.0f * pick(), 0.1f * jitter() ) ), 10.0f * pR(), glm::normalize( vec3( jitter(), jitter(), jitter() ) ) );
+        mat4 transform = glm::rotate( glm::translate( identity, 20.0f * vec3( 3.0f * ( 2.0f * pick() - 1.0f ), ( 2.0f * pick() - 1.0f ), pick() ) ), 10.0f * pR(), glm::normalize( vec3( jitter(), jitter(), jitter() ) ) );
         anchorParticle( transform * p0, transform );
     }
-    // cout << "Done." << endl;
+    cout << "Done." << endl;
 
     // we need to pick a set of offsets to use for the crystal growth...
         // start with a "tetragonal", which will emphasize orientation because it has longer offsets along one axis
     // the angle is uniform, so we will leave this as just a nonuniformly scaled basis...
-    const float xXx = 0.3f;
-    const float yYy = 0.3f;
+    const float xXx = 0.2f;
+    const float yYy = 0.1618f;
     const float zZz = 0.1618f;
 
-    const mat4 rX = glm::rotate( identity, -3.1415926535f / 3.0f, vec3( 0.0f, 1.0f, 0.0f ) );
-    const mat4 rY = identity;
-    const mat4 rZ = identity;
+    const float pi = 3.1415926535f;
+    const mat4 rX = glm::rotate( identity, pi / 3.0f, normalize( vec3( 0.0f, 0.0f, 1.0f ) ) );
+    const mat4 rY = glm::rotate( identity, -pi / 2.0f, normalize( vec3( 0.0f, 0.0f, 1.0f ) ) );
+    const mat4 rZ = glm::rotate( identity, -pi / 3.0f, normalize( vec3( 1.0f, 0.0f, 0.0f ) ) );
 
     // note that 6 bonding points is in no way a constraint here
     bondingSiteOffsets = {
         // rX * vec4( 0.0f, 0.0f, -zZz, 0.0f ),
-        rX * vec4( 0.0f, 0.0f, zZz, 0.0f ),
-        rX * rX * vec4( 0.0f, 0.0f, zZz, 0.0f ),
-        rX * rX * rX * vec4( 0.0f, 0.0f, zZz, 0.0f ),
+        rZ * vec4( 0.0f, 0.0f, zZz, 0.0f ),
         // rY * vec4( 0.0f, -yYy, 0.0f, 0.0f ),
         rY * vec4( 0.0f, yYy, 0.0f, 0.0f ),
         // rZ * vec4( -xXx, 0.0f, 0.0f, 0.0f ),
-        rZ * vec4( xXx, 0.0f, 0.0f, 0.0f ),
+        rX * vec4( xXx, 0.0f, 0.0f, 0.0f ),
     };
     
     cout << "Spawning Reporter Thread.......... ";
@@ -617,6 +620,7 @@ int main () {
                             hbox({ text( " x:  " ) | c1, text( to_string( minExtents.x ) + " " ) | c2, text( to_string( maxExtents.x ) ) | c2 }),
                             hbox({ text( " y:  " ) | c1, text( to_string( minExtents.y ) + " " ) | c2, text( to_string( maxExtents.y ) ) | c2 }),
                             hbox({ text( " z:  " ) | c1, text( to_string( minExtents.z ) + " " ) | c2, text( to_string( maxExtents.z ) ) | c2 }),
+                            hbox({ text( "Frame: " ) | c1, text( to_string( gifFrame ) ) | c2 }),
                         });
                     }),
                 }),
