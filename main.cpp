@@ -717,7 +717,7 @@ int main () {
                         particleUpdate( jobCounter.fetch_add( 1 ) );
                     } else {
                         // if I'm not, sleep 1ms
-                        std::this_thread::sleep_for( 1ms );
+                        sleep_for( 1ms );
                     }
                 }
                 return;
@@ -737,7 +737,82 @@ int main () {
     reporterThread.join();
     cout << "Terminating....................... Done." << endl;
 
-    cout << "Rendering Animation... ";
+    int frames = pointerPoolAllocator / particlesPerStep;
+    cout << " Rendering Animation Consisting of " << frames << " frames" << endl;
+    atomic_uintmax_t frameDispatcher{ 0 };
+
+    // the bulk data storage vector
+    vector< vector< uint8_t > > frameData;
+    vec3 pInit = ( *pointerPool[ 0 ] * p0 ).xyz();
+    vector< vec3 > minExtentsData; vec3 runningMin = pInit;
+    vector< vec3 > maxExtentsData; vec3 runningMax = pInit;
+    
+    for ( int i = 0; i <= frames; i++ ) {
+        frameData.emplace_back( 4 * imageWidth * imageHeight );
+        for ( int j = 0; j < particlesPerStep; j++ ) {
+            const int idx = std::min( int( i * particlesPerStep + j ), int( numAnchored ) );
+            const vec3 p = ( *pointerPool[ idx ] * p0 ).xyz();
+            runningMin = glm::min( runningMin, p );
+            runningMax = glm::max( runningMax, p );
+        }
+        minExtentsData.emplace_back( runningMin );
+        maxExtentsData.emplace_back( runningMax );
+    }
+    minExtentsData.emplace_back( runningMin );
+    maxExtentsData.emplace_back( runningMax );
+
+    // cout << "Allocated space:" << endl;
+    // for ( auto& frame : frameData ) {
+        // cout << frame.size();
+    // }
+
+    cout << "starting..." << endl;
+    thread renderThreads[ NUM_THREADS + 1 ];
+    for ( int i = 0; i < NUM_THREADS + 1; i++ ) {
+        renderThreads[ i ] = ( i == 0 ) ? thread( [&] () {
+            // reporter thread
+            while ( true ) {
+                sleep_for( 1000ms );
+                cout << "Dispatched " << frameDispatcher << " frames... ( of " << frames << " )" << endl;
+                if ( frameDispatcher > frames ) {
+                    break;
+                }
+            }
+        } ) : thread ( [&] () {
+            // worker thread
+            while ( true ) {
+                int frame = frameDispatcher.fetch_add( 1 );
+                if ( frame > frames ) {                    
+                    break;
+                } else {
+                    // render a frame...
+                    prepareOutputFrame( frameData[ frame ], particlesPerStep * frame,
+                        glm::mix( minExtentsData[ frame ], minExtentsData[ frame + 1 ], 0.5f ),
+                        glm::mix( maxExtentsData[ frame ], maxExtentsData[ frame + 1 ], 0.5f ),
+                        glm::scale( glm::rotate( identity, frame * 0.001f, glm::normalize( vec3( 0.7f, 1.0f, 0.8f ) ) ), vec3( glm::mix( 1.2f, 0.8f, float( frame ) / float( frames ) ) ) ) );
+                    
+                    // report finished
+                    cout << "finished frame " << frame << endl;
+                }
+            }
+        } );
+    }
+
+    // terminate everyone
+    for ( auto& thread : renderThreads ) {
+        thread.join();
+    }
+
+    // const uintmax_t ptrAllocateCache = pointerPoolAllocator;
+    // for ( int i = 5000; i < ptrAllocateCache; i += 5000 ) {
+        // pointerPoolAllocator = i;
+        // prepareOutputGIFFrame( &g );
+    // }
+    cout << endl << "Done." << endl;
+
+    // example "lossless" conversion from gif to mp4
+    // ffmpeg -i in.gif -c:v libx264 -preset veryslow -qp 0 output.mp4
+
     // init gif writing
     GifWriter g;
 	auto now = std::chrono::system_clock::now();
@@ -746,21 +821,15 @@ int main () {
 	ssA << std::put_time( std::localtime( &inTime_t ), "Crystal-%Y-%m-%d at %H-%M-%S.gif" );
 	GifBegin( &g, ssA.str().c_str() , imageWidth, imageHeight, gifDelay );
 
-    const uintmax_t ptrAllocateCache = pointerPoolAllocator;
-    for ( int i = 5000; i < ptrAllocateCache; i += 5000 ) {
-        pointerPoolAllocator = i;
-        prepareOutputGIFFrame( &g );
+	cout << "Prepping GIF file..." << std::flush;
+    for ( int i = 0; i < frameData.size(); i++ ) {
+        GifWriteFrame( &g, frameData[ i ].data(), imageWidth, imageHeight, gifDelay );
     }
-    cout << "Done." << endl;
 
-    // save the data out, bake out a preview or whatever for now...
-    // int outputRotationSteps = 5;
-    // for ( int i = 0; i < outputRotationSteps; i++ ) {
-        // cout << "prepping output rotation: " << i << " / " << outputRotationSteps << endl;
-        // prepareOutputGIFFrame( &g );
-    // }
     GifEnd( &g );
-    prepareOutputScreenshot();
+    cout << " Done." << endl;
+
+    // prepareOutputScreenshot();
 
 	return 0;
 }
