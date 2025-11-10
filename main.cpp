@@ -549,22 +549,22 @@ int main () {
     // we need to pick a set of offsets to use for the crystal growth...
         // start with a "tetragonal", which will emphasize orientation because it has longer offsets along one axis
     // the angle is uniform, so we will leave this as just a nonuniformly scaled basis...
-    const float xXx = 0.2f;
-    const float yYy = 0.1618f;
-    const float zZz = 0.1618f;
+    const float xXx = 0.1618f;
+    const float yYy = 0.618f;
+    const float zZz = 0.618f;
 
     const float pi = 3.1415926535f;
-    const mat4 rX = glm::rotate( identity, pi / 3.0f, normalize( vec3( 0.0f, 0.0f, 1.0f ) ) );
-    const mat4 rY = glm::rotate( identity, -pi / 2.0f, normalize( vec3( 0.0f, 0.0f, 1.0f ) ) );
-    const mat4 rZ = glm::rotate( identity, -pi / 3.0f, normalize( vec3( 1.0f, 0.0f, 0.0f ) ) );
+    const mat4 rX = glm::rotate( identity, 0.0f, normalize( vec3( 0.0f, 0.0f, 1.0f ) ) );
+    const mat4 rY = glm::rotate( identity, 0.0f * pi, normalize( vec3( 0.0f, 0.0f, 1.0f ) ) );
+    const mat4 rZ = glm::rotate( identity, pi / 5.0f, normalize( vec3( 1.0f, 0.0f, 0.0f ) ) );
 
     // note that 6 bonding points is in no way a constraint here
     bondingSiteOffsets = {
-        // rX * vec4( 0.0f, 0.0f, -zZz, 0.0f ),
+        // rZ * vec4( 0.0f, 0.0f, -zZz, 0.0f ),
         rZ * vec4( 0.0f, 0.0f, zZz, 0.0f ),
         // rY * vec4( 0.0f, -yYy, 0.0f, 0.0f ),
         rY * vec4( 0.0f, yYy, 0.0f, 0.0f ),
-        // rZ * vec4( -xXx, 0.0f, 0.0f, 0.0f ),
+        // rX * vec4( -xXx, 0.0f, 0.0f, 0.0f ),
         rX * vec4( xXx, 0.0f, 0.0f, 0.0f ),
     };
     
@@ -576,13 +576,12 @@ int main () {
 
             size_t update = 0;
 
-            int window_1_left = 10;
-            int window_1_top = 10;
-            int window_1_width = 40;
-            int window_1_height = 20;
+            int window_1_left = 1;
+            int window_1_top = 8;
+            int window_1_width = 36;
+            int window_1_height = 14;
 
             bool checked[3] = {false, false, false};
-            float slider = 50;
 
             auto window_1 = Window({
                 .inner = Container::Vertical({
@@ -601,7 +600,7 @@ int main () {
                             hbox({ text( " x:  " ) | c1, text( to_string( minExtents.x ) + " " ) | c2, text( to_string( maxExtents.x ) ) | c2 }),
                             hbox({ text( " y:  " ) | c1, text( to_string( minExtents.y ) + " " ) | c2, text( to_string( maxExtents.y ) ) | c2 }),
                             hbox({ text( " z:  " ) | c1, text( to_string( minExtents.z ) + " " ) | c2, text( to_string( maxExtents.z ) ) | c2 }),
-                            hbox({ text( "Frame: " ) | c1, text( to_string( gifFrame ) ) | c2 }),
+                            hbox({ text( "Frames Queued: " ) | c1, text( to_string( pointerPoolAllocator / particlesPerStep ) ) | c2 }),
                         });
                     }),
                 }),
