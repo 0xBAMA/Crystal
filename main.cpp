@@ -518,6 +518,9 @@ int main () {
     updateProcData();
     updateProcData();
 
+    // allocate space for the screenshot
+    screenshotBufferData.resize( imageWidth * imageHeight * 4 );
+
     // setting initial program state
     threadKill = false;
     // set all the thread fences "true"
@@ -532,7 +535,7 @@ int main () {
     cout << "Done." << endl;
 
     cout << "Spawning Pointer Pool... ";
-    for ( int i = 0; i < 20000000; i++ ) {
+    for ( int i = 0; i < maxParticles + 100000; i++ ) {
         pointerPool.push_back( make_shared< mat4 >() );        
     }
     cout << "Done." << endl;
@@ -540,8 +543,8 @@ int main () {
     // an initial point in the model, so we have something to bond to
     cout << "Anchoring Initial Seed Particles... ";
     rng pR( -2.0f, 2.0f );
-    for ( int i = 0; i < 10; i++ ) {
-        mat4 transform = glm::rotate( glm::translate( identity, 20.0f * vec3( 3.0f * ( 2.0f * pick() - 1.0f ), ( 2.0f * pick() - 1.0f ), pick() ) ), 10.0f * pR(), glm::normalize( vec3( jitter(), jitter(), jitter() ) ) );
+    for ( int i = 0; i < 2000; i++ ) {
+        mat4 transform = glm::rotate( glm::translate( identity, 10.0f * vec3( ( 2.0f * pick() - 1.0f ), ( 2.0f * pick() - 1.0f ), pick() ) ), 10.0f * pR(), glm::normalize( vec3( jitter(), jitter(), jitter() ) ) );
         anchorParticle( transform * p0, transform );
     }
     cout << "Done." << endl;
@@ -612,7 +615,7 @@ int main () {
             });
 
             auto window_2 = Window({
-                .inner = Renderer([] (bool focused) {
+                .inner = Renderer([] ( bool focused ) {
                     Elements temp, accum;
                     for ( int j = 0; j < 6; j++ ) {
                         for ( int i = 0; i < 12; i++ ) {
@@ -635,11 +638,9 @@ int main () {
               window_2,
             });
 
-            auto screen = ScreenInteractive::FixedSize( 80, 30 );
+            auto screen = ScreenInteractive::FixedSize( 36, 18 );
             auto ftxDAG = CatchEvent( window_container, [&]( Event event ) {
                 if ( event == Event::Character('q') ) {
-                    // save out the gif
-                    // GifEnd( &g );
                     screen.ExitLoopClosure()();
                     return true;
                 }
@@ -657,29 +658,13 @@ int main () {
             ftxui::Loop loop( &screen, ftxDAG );
             bool quit = false;
             while ( !loop.HasQuitted() && !quit ) {
-            // while ( !quit ) {
-               screen.RequestAnimationFrame();
-               loop.RunOnce();
-               sleep_for( 100ms ); 
+                screen.RequestAnimationFrame();
+                loop.RunOnce();
+                sleep_for( 100ms ); 
 
-               if ( pointerPoolAllocator > 5000000 ) quit = true;
-
-               // static uintmax_t lastObserved = 0;
-               // static uintmax_t lastObservedAccum = 0;
-               // lastObservedAccum += numAnchored - lastObserved;
-               // lastObserved = numAnchored;
-               // if ( lastObservedAccum > 5000 ) {
-                   // prepareOutputGIFFrame( &g );
-                   // lastObservedAccum = 0;
-                   // if ( gifFrame > 600 || pointerPoolAllocator > 15000000 ) {
-                       // quit = true;
-                   // }
-                   // cout << "finished " << gifFrame << endl;
-               // }
-
-               // terminate condition:
-               // if (  ) {
-               // }
+                if ( numAnchored >= maxParticles ) {                   
+                    quit = true;
+                }
             }
 
             // signal that all threads should exit and wait for them to do so
