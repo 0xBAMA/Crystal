@@ -504,12 +504,15 @@ void prepareOutputScreenshot () {
 //=================================================================================================
 // for dispatching particle updates
 atomic_uintmax_t jobCounter { 0 };
+const uintmax_t maxParticles = 50'000'000;
+const uintmax_t particlesPerStep = 100'000;
 
 // threadpool setup
 constexpr int NUM_THREADS = 72;
 bool threadFences[ NUM_THREADS ];
 bool threadKill;
 std::thread threads[ NUM_THREADS ];
+
 //=================================================================================================
 #include "reporter.h" // proc filesystem reading
 //=================================================================================================
