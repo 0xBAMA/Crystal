@@ -370,8 +370,8 @@ void particleUpdate ( uintmax_t jobIndex ) {
 
             // the mat4 tells us the orientation and the position of the point
             // we have a very low chance to alter the orientation... jitter position, etc
-            if ( pick() < 0.0005f ) {
-                closestBondingPointOffset += vec3( jitter(), jitter(), jitter() );
+            if ( pick() < 0.00001f ) {
+                closestBondingPointOffset += 10.0f * vec3( jitter(), jitter(), jitter() );
                 closestPointTransform = glm::translate( glm::rotate( glm::translate( closestPointTransform, -closestPointTransformed ), 100.0f * jitter(), glm::normalize( vec3( jitter(), jitter(), jitter() ) ) ), closestPointTransformed );
             }
             
@@ -395,48 +395,50 @@ int gifFrame = 0;
 const int gifDelay = 4;
 const int imageWidth = 1280;
 const int imageHeight = 720;
-std::vector< uint8_t > data;
+vector< uint8_t > screenshotBufferData;
 
-int binCountsA[ imageWidth * imageHeight ];
-float binHeights[ imageWidth * imageHeight ];
+// operating on a buffer of image data
+thread_local vector< float > scratch; // I'd like to move to something consolidated/straightforward like this
 
-void clearBuffers () {
-    for ( auto& c : binCountsA )
-        c = 0;
+thread_local int binCountsA[ imageWidth * imageHeight ] = { 0 };
+thread_local float binHeights[ imageWidth * imageHeight ] = { 0 };
 
-    for ( auto& h : binHeights )
-        h = 0;
-}
+void prepareOutputFrame ( vector< uint8_t > &data, const int count, const vec3 minExtentsIn, const vec3 maxExtentsIn, mat4 transform ) {
+// trying to do something with some smoothing... need to precompute bounding boxes for each frame if I'm going to do this
+    // static ivec3 displayExtentsMin = minExtents - ivec3( 5 );
+    // displayExtentsMin = ivec3( glm::mix( vec3( displayExtentsMin ), vec3( minExtents ) - vec3( 5.0f ), 0.5f ) );
 
-size_t maxSize = 0;
+    // static ivec3 displayExtentsMax = maxExtents + ivec3( 5 );
+    // displayExtentsMax = ivec3( glm::mix( vec3( displayExtentsMax ), vec3( maxExtents ) + vec3( 5.0f ), 0.5f ) );
 
-void prepareOutputFrame () {
-    static ivec3 displayExtentsMin = minExtents - ivec3( 5 );
-    displayExtentsMin = ivec3( glm::mix( vec3( displayExtentsMin ), vec3( minExtents ) - vec3( 5.0f ), 0.5f ) );
+    // static ivec3 midPoint = ( displayExtentsMin + displayExtentsMax ) / 2;
+    // midPoint = ivec3( glm::mix( vec3( midPoint ), vec3( displayExtentsMin + displayExtentsMax ) / 2.0f, 0.5f ) );
 
-    static ivec3 displayExtentsMax = maxExtents + ivec3( 5 );
-    displayExtentsMax = ivec3( glm::mix( vec3( displayExtentsMax ), vec3( maxExtents ) + vec3( 5.0f ), 0.5f ) );
+    int margin = -10;
+    vec3 displayExtentsMin = minExtentsIn - vec3( margin );
+    vec3 displayExtentsMax = maxExtentsIn + vec3( margin );
+    const vec3 midPoint = vec3( displayExtentsMin + displayExtentsMax ) / 2.0f;
 
-    static ivec3 midPoint = ( displayExtentsMin + displayExtentsMax ) / 2;
-    midPoint = ivec3( glm::mix( vec3( midPoint ), vec3( displayExtentsMin + displayExtentsMax ) / 2.0f, 0.5f ) );
-
-    const ivec3 spans = maxExtents - minExtents;
-    const int maxSpan = max( max( spans.x, spans.y ), spans.z );
-    const ivec3 delta = ivec3( maxSpan ) - spans;
+    const vec3 spans = maxExtentsIn - minExtentsIn;
+    const float maxSpan = max( max( spans.x, spans.y ), spans.z );
+    const vec3 delta = vec3( maxSpan ) - spans;
     displayExtentsMin -= delta;
     displayExtentsMax += delta;
     
     // restore prior values of z for color stuff
-    displayExtentsMin.z = minExtents.z;
-    displayExtentsMax.z = maxExtents.z;
+    displayExtentsMin.z = minExtentsIn.z;
+    displayExtentsMax.z = maxExtentsIn.z;
+
+    for ( auto& b : binCountsA ) { b = 0; }
+    for ( auto& b : binHeights ) { b = 0; }
+
+    // thread_local float binLerpV[ imageWidth * imageHeight ] = { 0 };
 
     int maxCountA = 0;
     int nonzeroBinsA = 0;
-    const uintmax_t ptrCache = pointerPoolAllocator; 
-    for ( auto& b : binCountsA ) { b = 0; }
-    for ( uintmax_t i = 0; i < ptrCache; i++ ) {
+    for ( uintmax_t i = 0; i < count; i++ ) {
         const vec3 p = ( *pointerPool[ i ] * p0 ).xyz();
-        const vec3 pT = glm::translate( glm::rotate( glm::translate( identity, -vec3( midPoint ) ), 0.01618f * gifFrame, glm::normalize( vec3( 1.0f, 0.1f, 0.3f ) ) ), vec3( midPoint ) ) * vec4( p, 1.0f );
+        const vec3 pT = glm::translate( transform * glm::translate( identity, -vec3( midPoint ) ), vec3( midPoint ) ) * vec4( p, 1.0f );
         const vec3 loc = vec3(
             remap( pT.x, displayExtentsMin.x, displayExtentsMax.x, 0.0f, imageWidth * ( float( imageHeight ) / float( imageWidth ) ) ) + imageWidth / 4.0f,
             remap( pT.y, displayExtentsMin.y, displayExtentsMax.y, 0.0f, imageHeight ),
@@ -452,31 +454,35 @@ void prepareOutputFrame () {
             const int idx = int( loc.x ) + imageWidth * int( loc.y ); 
             binCountsA[ idx ]++;
             // binHeights[ idx ] = max( clamp( remap( p.z, displayExtentsMin.z, displayExtentsMax.z, 0.0f, 1000.0f ), 0.0f, 999.0f ), binHeights[ idx ] );
-            binHeights[ idx ] = max( float( i ) / float( ptrCache ), binHeights[ idx ] );
+            binHeights[ idx ] = max( float( i ) / float( count ), binHeights[ idx ] );
             maxCountA = std::min( std::max( maxCountA, binCountsA[ idx ] ), int( 512 ) );
         }
     }
 
-    cout << "processed " << ptrCache << " particles" << endl;
-    cout << "found max " << maxCountA << " points per screen bin" << endl;
+    // cout << "processed " << ptrCache << " particles" << endl;
+    // cout << "found max " << maxCountA << " points per screen bin" << endl;
 
     // write out the image
-    data.clear();
-    data.reserve( 4 * imageWidth * imageHeight );
-    for ( int i = 0; i < ( imageWidth * imageHeight ); i++ ) {
+    // data.clear();
+    // data.reserve( 4 * imageWidth * imageHeight );
+
+    for ( auto& c : data ) {
+        c = 0;
+    }
+
+    for ( int i = 0; i < ( imageWidth * imageHeight * 4 ); i += 4 ) {
         // some height term and a density term
-        float h = binHeights[ i ];
+        float h = binHeights[ i / 4 ];
 
         // float b = ( binCountsA[ i ] == 0 ) ? 0 : ( 255 * glm::exp( -0.001f * float( binCountsA[ i ] ) / float( maxCountA ) ) );
-        float b = 255 * glm::pow( float( binCountsA[ i ] )  / float( maxCountA ), 0.8f );        
+        float b = 255 * glm::pow( float( binCountsA[ i / 4 ] )  / float( maxCountA ), 0.8f );        
 
-        vec3 c = glm::mix( vec3( 1.0f ), vec3( 1.0f, 0.1f, 0.1f ), vec3( h ) );
+        vec3 c = glm::mix( vec3( 1.0f ), vec3( 0.5f, 0.0f, 1.0f ), vec3( sqrt( h ) ) );
 
-        data.push_back( std::clamp( uint( b * c.x ), 0u, 255u ) );
-        data.push_back( std::clamp( uint( b * c.y ), 0u, 255u ) );
-        data.push_back( std::clamp( uint( b * c.z ), 0u, 255u ) );
-        
-        data.push_back( 255 );
+        data[ i + 0 ] = ( std::clamp( uint( b * c.x ), 0u, 255u ) );
+        data[ i + 1 ] = ( std::clamp( uint( b * c.y ), 0u, 255u ) );
+        data[ i + 2 ] = ( std::clamp( uint( b * c.z ), 0u, 255u ) );
+        data[ i + 3 ] = ( 255 );
     }
 }
 
