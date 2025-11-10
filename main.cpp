@@ -492,24 +492,13 @@ void prepareOutputScreenshot () {
         // specific order in which all the particles were bound to the crystal. They will be allocated in the order they bond,
         // which means that this does a couple things: first, I can playback the process... second, I have this information
         // precomputed, so that we don't have to do this iteration over the hashmap first.
-        
-    clearBuffers();
-    prepareOutputFrame();
+    prepareOutputFrame( screenshotBufferData, pointerPoolAllocator, minExtents, maxExtents, identity );
 
 	auto now = std::chrono::system_clock::now();
 	auto inTime_t = std::chrono::system_clock::to_time_t( now );
 	std::stringstream ssA;
 	ssA << std::put_time( std::localtime( &inTime_t ), "Crystal-%Y-%m-%d at %H-%M-%S.png" );
-    stbi_write_png( ssA.str().c_str(), imageWidth, imageHeight, 4, &data[ 0 ], 4 * imageWidth );
-}
-
-void prepareOutputGIFFrame( GifWriter *g ) {   
-
-    clearBuffers();
-    prepareOutputFrame();
-
-    GifWriteFrame( g, data.data(), imageWidth, imageHeight, gifDelay );
-    gifFrame++;
+    stbi_write_png( ssA.str().c_str(), imageWidth, imageHeight, 4, &screenshotBufferData[ 0 ], 4 * imageWidth );
 }
 
 //=================================================================================================
