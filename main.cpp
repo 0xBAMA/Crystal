@@ -97,7 +97,7 @@ namespace std {
 			std::size_t h1 = std::hash< int >{}( s.x );
 			std::size_t h2 = std::hash< int >{}( s.y );
 			std::size_t h3 = std::hash< int >{}( s.z );
-			return h1 ^ ( h2 << 12 ) ^ ( h3 << 24 );
+			return h1 ^ ( h2 << 10 ) ^ ( h3 << 20 );
 		}
 	};
 }
