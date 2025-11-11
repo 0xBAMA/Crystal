@@ -644,13 +644,13 @@ inline void Crystal::StampChar ( const uint8_t &c, ivec2 location, const ivec2 s
 inline void Crystal::SaveCurrentImage ( const string &filename ) const {
     stbi_write_png( filename.c_str(), imageWidth, imageHeight, 4, &imageBuffer[ 0 ], 4 * imageWidth );
 }
-void Screenshot () {
+void Crystal::Screenshot () {
     // spawn a thread? tbd
 }
-void Quit () {
+void Crystal::Quit () {
     // need to set threadkill? not sure what else... this maybe should just operate on the vector
 }
-void Save () {
+void Crystal::Save () {
     // save out the model
 }
 //=================================================================================================
