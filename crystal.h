@@ -668,21 +668,30 @@ inline void Crystal::AnchorParticle ( const ivec3 iP, const mat4 &pTransform ) {
 // respawn the particle
 inline void Crystal::RespawnParticle ( const int i ) {
     // simple importance sampling scheme
-    uint8_t pick = simConfig.importanceStructure[ std::clamp( int( uniformRNG() * 1024 ), 0, 1023 ) ];
+    const uint8_t pick = simConfig.importanceStructure[ std::clamp( int( uniformRNG() * 1024 ), 0, 1023 ) ];
+
+    const vec3 minE = vec3( minExtents );
+    const vec3 maxE = vec3( maxExtents );
+    const vec3 lerpValues = vec3( uniformRNG(), uniformRNG(), uniformRNG() );
+
+    // uniformly distributed within the sim volume
+    vec3 p = glm::mix( minE, maxE, lerpValues );
 
     switch ( pick ) {
-    // x faces
-    case 0: break;
-    case 1: break;
-    // y faces
-    case 2: break;
-    case 3: break;
-    // z faces
-    case 4: break;
-    case 5: break;
-    // uniform spawn
+    // flatten to one of the x faces
+    case 0: p.x = minE.x; break;
+    case 1: p.x = maxE.x; break;
+    // flatten to one of the y faces
+    case 2: p.y = minE.y; break;
+    case 3: p.y = maxE.y; break;
+    // flatten to one of the z faces
+    case 4: p.z = minE.z; break;
+    case 5: p.z = maxE.z; break;
+    // uniform spawn - no change
     default: break;
     }
+
+    particleScratch[ i ] = vec4( p, simConfig.particleAttitionHealth );
 }
 //=================================================================================================
 // do an update on the particle
