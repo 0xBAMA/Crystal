@@ -263,8 +263,8 @@ float temperature = 2.0f;
 thread_local rngN jitter( 0.0f, 0.1f );
 
 void respawnParticle ( vec4 &p ) {
-    // const bool face = ( pick() < 0.5f );
-    const bool face = true;
+    const bool face = ( pick() < 0.5f );
+    // const bool face = true;
     constexpr float margin = 0.0f;
     p.x = glm::mix( minExtents.x - margin, maxExtents.x + margin, pick() );
     p.y = glm::mix( minExtents.y - margin, maxExtents.y + margin, pick() );
@@ -340,7 +340,7 @@ void particleUpdate ( uintmax_t jobIndex ) {
     }
 
     // move the particle slightly... small change each update
-    constexpr vec3 staticFlow = vec3( 1.0f, 3.0f, 1.0f );
+    constexpr vec3 staticFlow = 0.0f * vec3( 1.0f, 3.0f, 1.0f );
     thread_local vec4 flowVector = vec4( ( 1.0f + 0.3f * pick() ) * glm::normalize( vec3( jitter(), jitter(), jitter() ) ), 0.0f );
     flowVector = glm::rotate( identity, jitter(), glm::normalize( vec3( jitter(), jitter(), jitter() ) ) ) * v0;
     particle += vec4( temperature * vec3( jitter(), jitter(), jitter() ) + pick() * flowVector.xyz() + pick() * staticFlow, 0.0f );
@@ -824,7 +824,7 @@ int main () {
                     // Checkbox("Check me", &checked[0]),
                     // Checkbox("Check me", &checked[1]),
                     // Checkbox("Check me", &checked[2]),
-                    Slider( "Temperature", &temperature, 0.0f, 40.0f ),
+                    Slider( "Temperature", &temperature, 0.0f, 69.0f ),
                     Renderer( [&] ( bool focused ) {
                         auto c1 = color( Color::RGB( 255, 34, 0 ) );
                         auto c2 = color( Color::RGB( 255, 255, 34 ) );
