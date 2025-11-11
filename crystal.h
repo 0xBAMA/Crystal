@@ -15,6 +15,7 @@ using std::to_string;
 #include <ftxui/screen/screen.hpp>
 #include <ftxui/screen/color.hpp>
 
+#include <ftxui/dom/table.hpp>
 #include <ftxui/component/loop.hpp>
 #include <ftxui/component/captured_mouse.hpp>       // for ftxui
 #include <ftxui/component/component.hpp>            // for Checkbox, Renderer, Vertical
@@ -499,6 +500,21 @@ public:
             }
         }
 
+    // FONT LUT
+        // it is somewhat redundant to parse this every time... but whatever, it's
+            // just a small cost in the constructor, because it's not a large image
+
+        int x, y, n; // last arg set to 1 means give me 1 channel data out 
+        fontLUT = stbi_load( "fatFont.png", &x, &y, &n, 1 );
+
+        ClearImage();
+
+        // const string s = string( "TEST 123 TEST" );
+        // StampString( s, ivec2( 100, 200 ), ivec2( 1 ) );
+        // StampString( s, ivec2( 100, 250 ), ivec2( 1, 2 ) );
+        // StampString( s, ivec2( 100, 300 ), ivec2( 2, 1 ) );
+        // SaveCurrentImage( "test.png" );
+
     // SPAWNING THREADS
         // a monitor thread which maintains a set of data for the master to access
             // and also will control things like screenshots... I want that to be
@@ -508,21 +524,6 @@ public:
             // and the simulation has not completed, return to particle work
 
         // a set of threads which function as the worker threads for the job system
-
-
-    // FONT LUT
-        // it is somewhat redundant to parse this every time... but whatever, it's
-            // just a small cost in the constructor, because it's not a large image
-
-        int x, y, n; // last arg set to 1 means give me 1 channel data out 
-        fontLUT = stbi_load( "fatFont.png", &x, &y, &n, 1 );
-
-        ClearImage();
-        // const string s = string( "TEST 123 TEST" );
-        // StampString( s, ivec2( 100, 200 ), ivec2( 1 ) );
-        // StampString( s, ivec2( 100, 250 ), ivec2( 1, 2 ) );
-        // StampString( s, ivec2( 100, 300 ), ivec2( 2, 1 ) );
-        // SaveCurrentImage( "test.png" );
 
         monitorThread = thread( [ & ] () { MonitorThreadFunction(); } );
         for ( int i = 0; i < NUM_THREADS; i++ ) {
@@ -548,7 +549,7 @@ public:
         ssA << std::put_time( std::localtime( &inTime_t ), "Crystal-Model-%Y-%m-%d at %H-%M-%S.png" );
 
         // SaveModel( ssA.str().c_str() );
-        SaveCurrentImage( ssA.str().c_str() );
+        SaveCurrentImage( ssA.str() );
         
     }
 };
@@ -897,7 +898,7 @@ inline void Crystal::MonitorThreadFunction () {
         // wait for the next iteration
         sleep_for( 10s );
         ssDispatch.store( 0 );
-        while ( ssDispatch < numPixels ) {    
+        while ( ssDispatch < numPixels ) {
             sleep_for( 1s );
         }
         
