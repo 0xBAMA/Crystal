@@ -1,5 +1,6 @@
 //=================================================================================================
 // basic IO
+#include <cmath>
 #include <string>
 #include <fstream>
 #include <iostream>
@@ -287,30 +288,48 @@ struct CrystalSimConfig {
     // bonding offsets + template information or "random" and we list the bonding offsets
     // templating for the basic crystal types
     string bondingOffsetTemplate;
-    float bondingOffsetTemplateValues[ 6 ];
-    vector< vec3 > bondingOffsets;
+    float bondingOffsetTemplateValues[ 6 ]; // a,b,c,alpha,beta,gamma
+    // do we need something to represent symmetry?
+    vector< vec3 > bondingOffsets; // simulation runtime bonding offsets
 
-    // initial crystal seeding
-        // how many (minimum 1), span of distribution
+    // scale factor for particle jitter
+    float temperature;
+
     // search radius? longer term, maybe
-    // max bonding distance
-    // chance to bond
+
+    // max bonding distance + stochastic bonding
+    float bondThreshold;
+    float chanceToBond;
+
     // bonding strategy - random of the bonding offsets available or closest bonding offset
         // maybe this can be like "chance to randomize"
+    float bondChanceToRandomize;
+
     // static flow, dynamic flow, "wind" terms
-    // temperature
+    float staticFlowAmount;
+    vec3 staticFlowDirection;
+    float dynamicFlowAmount;
+    vec3 dynamicFlowInitialDirection;
+
     // defects
-        // how often a defect happens
-        // how big the position jitter is
-        // how big the rotation jitter is
+    float defectRate; // how often a defect happens
+    float defectPositionJitter; // how big the position jitter is
+    float defectRotationJitter; // how big the rotation jitter is
+
     // attrition health + oob margin
+    float particleAttitionHealth;
+    float particleOOBMargin;
+
     // information to create the spawn importance sampling structure
     float spawnProbabilities[ 7 ];
     uint8_t importanceStructure[ 1024 ];
 
-    // what else?
-
+    // informing the initial seeding
+    ivec3 InitialSeedSpanMin;
+    ivec3 InitialSeedSpanMax;
     uint32_t numInitialSeedParticles;
+
+    // what else?
 };
 
 struct CrystalRenderConfig {
@@ -392,7 +411,7 @@ public:
     void ClearImage ();                                         // clear the entire image to black
     void DrawPixel ( uint32_t x, uint32_t y );                  // this will only touch that pixel's memory... still need sync for resources we read from
     bool GlyphRef ( const uint8_t &c, ivec2 offset ) const;     // reference the font LUT
-    void SaveCurrentImage ( const string &filename );           // save out the current framebuffer state
+    void SaveCurrentImage ( const string &filename ) const;     // save out the current framebuffer state
     void StampString ( const string &s, ivec2 location, ivec2 scale ); // write a string onto the image
     void StampChar ( const uint8_t &c, ivec2 location, ivec2 scale ); // called by StampString
 
@@ -415,6 +434,7 @@ public:
     CrystalSimConfig simConfig;
     void LoadSpecifiedConfig ( const string& path );
     void GenerateRandomConfig ();
+    void GenerateOffsets ( const string& templateSelect );
 
     // monitor thread function
     void MonitorThreadFunction ();
@@ -436,6 +456,11 @@ public:
             particleScratch.resize( simConfig.numParticlesScratch );
             particleStorage.resize( simConfig.numParticlesStorage );
             particleStorageAllocator = 0;
+
+            for ( auto& ptr : particleStorage ) {
+                // shared_ptr initialized as nullptr, interesting
+                ptr = make_shared< mat4 >();
+            }
         }
 
         { // create the importance sampling structure around spawning particles on faces/in the volume
@@ -465,9 +490,19 @@ public:
             }
         }
 
+        cout << "adding initial anchored particles" << endl;
         { // add initial seed particles to the hashmap
             for ( int i = 0; i < simConfig.numInitialSeedParticles; i++ ) {
+                cout << "Adding particle " << i << endl;
+                // pick from the specified distribution
+                const vec3 p = glm::mix( vec3( simConfig.InitialSeedSpanMin ),
+                    vec3( simConfig.InitialSeedSpanMax ),
+                    vec3( uniformRNG(), uniformRNG(), uniformRNG() ) );
 
+                const vec3 axis = normalize( vec3( uniformRNG(), uniformRNG(), uniformRNG() ) );
+                const mat4 transform = glm::translate( glm::rotate( identity, 100.0f * normalRNG(), axis ), p );
+
+                AnchorParticle( ivec3( p ), transform );
             }
         }
 
@@ -490,13 +525,11 @@ public:
         fontLUT = stbi_load( "fatFont.png", &x, &y, &n, 1 );
 
         ClearImage();
-        const string s = string( "TEST 123 TEST" );
-
-        StampString( s, ivec2( 100, 200 ), ivec2( 1 ) );
-        StampString( s, ivec2( 100, 250 ), ivec2( 1, 2 ) );
-        StampString( s, ivec2( 100, 300 ), ivec2( 2, 1 ) );
-
-        SaveCurrentImage( "test.png" );
+        // const string s = string( "TEST 123 TEST" );
+        // StampString( s, ivec2( 100, 200 ), ivec2( 1 ) );
+        // StampString( s, ivec2( 100, 250 ), ivec2( 1, 2 ) );
+        // StampString( s, ivec2( 100, 300 ), ivec2( 2, 1 ) );
+        // SaveCurrentImage( "test.png" );
     }
 
     ~Crystal () {
@@ -533,7 +566,7 @@ inline void Crystal::DrawPixel ( const uint32_t x, const uint32_t y ) {
     shared_lock lock( imageMutex );
     if ( glm::all( glm::lessThan( uv, highThresh ) ) &&
         glm::all( glm::greaterThan( uv, lowThresh ) ) ) {
-        // we are in the area where we need to do additional work to render
+        // we are in the area of the image where we need to do additional work to render
 
         // ray setup
 
@@ -542,7 +575,7 @@ inline void Crystal::DrawPixel ( const uint32_t x, const uint32_t y ) {
         // delta track raymarch
 
             // shadow ray trace
-        
+
     } // else you are in the black bars area
         // I want to do the labels single threaded, not much sense making it
         // more complicated trying to evaluate a list of glyphs here, it is
@@ -587,7 +620,7 @@ inline void Crystal::StampChar ( const uint8_t &c, ivec2 location, const ivec2 s
     }
 }
 //=================================================================================================
-inline void Crystal::SaveCurrentImage ( const string &filename ) {
+inline void Crystal::SaveCurrentImage ( const string &filename ) const {
     stbi_write_png( filename.c_str(), imageWidth, imageHeight, 4, &imageBuffer[ 0 ], 4 * imageWidth );
 }
 //=================================================================================================
@@ -608,6 +641,16 @@ inline bool Crystal::ParticleUpdateIndicated ( uintmax_t &jobIdx ) {
 }
 //=================================================================================================
 // probably add the allocator function here
+//=================================================================================================
+inline void Crystal::GenerateOffsets ( const string &templateSelect ) {
+
+// config has:
+    // string bondingOffsetTemplate;
+    // float bondingOffsetTemplateValues[ 6 ];
+    // vector< vec3 > bondingOffsets;
+
+}
+//=================================================================================================
 inline void Crystal::LoadSpecifiedConfig ( const string &path ) {
     // load a YAML string from a file
 
@@ -626,17 +669,110 @@ inline void Crystal::GenerateRandomConfig () {
     out << YAML::Key << "numParticlesStorage";
     out << YAML::Value << simConfig.numParticlesStorage;
 
-    simConfig.numInitialSeedParticles = std::max( uint32_t( pow( uniformRNG(), 4.0f ) * 200 ), 1u );
+    simConfig.numInitialSeedParticles = std::max( uint32_t( 200 * std::pow( uniformRNG(), 4.0f ) ), 1u );
     out << YAML::Key << "numInitialSeedParticles";
     out << YAML::Value << simConfig.numInitialSeedParticles;
 
+    simConfig.InitialSeedSpanMin = ivec3( -10 );
+    out << YAML::Key << "InitialSeedParticleSpanMinX";
+    out << YAML::Value << simConfig.InitialSeedSpanMin.x;
+    out << YAML::Key << "InitialSeedParticleSpanMinY";
+    out << YAML::Value << simConfig.InitialSeedSpanMin.y;
+    out << YAML::Key << "InitialSeedParticleSpanMinZ";
+    out << YAML::Value << simConfig.InitialSeedSpanMin.z;
 
+    simConfig.InitialSeedSpanMax = ivec3( 10 );
+    out << YAML::Key << "InitialSeedParticleSpanMaxX";
+    out << YAML::Value << simConfig.InitialSeedSpanMax.x;
+    out << YAML::Key << "InitialSeedParticleSpanMaxY";
+    out << YAML::Value << simConfig.InitialSeedSpanMax.y;
+    out << YAML::Key << "InitialSeedParticleSpanMaxZ";
+    out << YAML::Value << simConfig.InitialSeedSpanMax.z;
+
+    simConfig.particleAttitionHealth = 69;
+    out << YAML::Key << "particleAttitionHealth";
+    out << YAML::Value << simConfig.particleAttitionHealth;
+
+    simConfig.particleOOBMargin = 0;
+    out << YAML::Key << "particleOOBMargin";
+    out << YAML::Value << simConfig.particleOOBMargin;
+
+    // initialize spawn probabilities as uniformly random
+    for ( auto& sp : simConfig.spawnProbabilities ) {
+        sp = 1.0f;
+    }
+    out << YAML::Key << "spawnProbabilityPositiveX";
+    out << YAML::Value << simConfig.spawnProbabilities[ 0 ];
+    out << YAML::Key << "spawnProbabilityNegativeX";
+    out << YAML::Value << simConfig.spawnProbabilities[ 1 ];
+    out << YAML::Key << "spawnProbabilityPositiveY";
+    out << YAML::Value << simConfig.spawnProbabilities[ 2 ];
+    out << YAML::Key << "spawnProbabilityNegativeY";
+    out << YAML::Value << simConfig.spawnProbabilities[ 3 ];
+    out << YAML::Key << "spawnProbabilityPositiveZ";
+    out << YAML::Value << simConfig.spawnProbabilities[ 4 ];
+    out << YAML::Key << "spawnProbabilityNegativeZ";
+    out << YAML::Value << simConfig.spawnProbabilities[ 5 ];
+
+    simConfig.temperature = 1.0f + 10.0f * uniformRNG();
+    out << YAML::Key << "temperature";
+    out << YAML::Value << simConfig.temperature;
+
+    simConfig.defectRate = 0.0001f;
+    out << YAML::Key << "defectRate";
+    out << YAML::Value << simConfig.defectRate;
+
+    simConfig.defectPositionJitter = 1.0f;
+    out << YAML::Key << "defectPositionJitter";
+    out << YAML::Value << simConfig.defectPositionJitter;
+
+    simConfig.defectRotationJitter = 1.0f;
+    out << YAML::Key << "defectRotationJitter";
+    out << YAML::Value << simConfig.defectRotationJitter;
+
+    simConfig.bondChanceToRandomize = 0.1f;
+    out << YAML::Key << "bondChanceToRandomize";
+    out << YAML::Value << simConfig.bondChanceToRandomize;
+
+    simConfig.bondThreshold = 0.75f;
+    out << YAML::Key << "bondThreshold";
+    out << YAML::Value << simConfig.bondThreshold;
+
+    simConfig.chanceToBond = 1.0f;
+    out << YAML::Key << "chanceToBond";
+    out << YAML::Value << simConfig.chanceToBond;
+
+    simConfig.staticFlowAmount = uniformRNG();
+    out << YAML::Key << "staticFlowAmount";
+    out << YAML::Value << simConfig.staticFlowAmount;
+
+    simConfig.staticFlowDirection = normalize( vec3( normalRNG(), normalRNG(), normalRNG() ) );
+    out << YAML::Key << "staticFlowDirectionX";
+    out << YAML::Value << simConfig.staticFlowDirection.x;
+    out << YAML::Key << "staticFlowDirectionY";
+    out << YAML::Value << simConfig.staticFlowDirection.y;
+    out << YAML::Key << "staticFlowDirectionZ";
+    out << YAML::Value << simConfig.staticFlowDirection.z;
+
+    simConfig.dynamicFlowAmount = uniformRNG();
+    out << YAML::Key << "dynamicFlowAmount";
+    out << YAML::Value << simConfig.dynamicFlowAmount;
+
+    simConfig.dynamicFlowInitialDirection = normalize( vec3( normalRNG(), normalRNG(), normalRNG() ) );
+    out << YAML::Key << "dynamicFlowInitialDirectionX";
+    out << YAML::Value << simConfig.dynamicFlowInitialDirection.x;
+    out << YAML::Key << "dynamicFlowInitialDirectionY";
+    out << YAML::Value << simConfig.dynamicFlowInitialDirection.y;
+    out << YAML::Key << "dynamicFlowInitialDirectionZ";
+    out << YAML::Value << simConfig.dynamicFlowInitialDirection.z;
 
     out << YAML::EndMap;
 
     cout << "Configured:" << endl;
     cout << out.c_str() << endl;
 }
+
+//=================================================================================================
 //=================================================================================================
 // add the particle to the hashmap
 inline void Crystal::AnchorParticle ( const ivec3 iP, const mat4 &pTransform ) {
@@ -647,6 +783,7 @@ inline void Crystal::AnchorParticle ( const ivec3 iP, const mat4 &pTransform ) {
     } else {
         // we haven't added to this GridCell yet
         gcp = make_shared< GridCell >();
+        anchoredParticles.insert( iP, gcp );
     }
 
     { // lock the GridCell write mutex and add this point, if we have space
@@ -743,11 +880,12 @@ inline void Crystal::WorkerThreadFunction ( int id ) {
         const bool work = ParticleUpdateIndicated( i );
 
         if ( ( !ss && !work ) || pause ) {
+            // there is no work to do right now
             sleep_for( 1ms );
         } else if ( ss ) {
             // we have secured work for one pixel
             DrawPixel( x, y );
-            ++ssComplete; // helps with "percentage complete"
+            ++ssComplete; // helps with reporting "percentage complete"
         } else if ( work ) {
             // we need to do work for one particle update, index indicated by the job counter i
             UpdateParticle( static_cast< int >( i % simConfig.numParticlesScratch ) );
