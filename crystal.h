@@ -279,11 +279,38 @@ int main() {
 //=================================================================================================
 struct CrystalSimConfig {
 
-    // todo
+    // integral stuff:
+    // number of threads -> difficult-ish to change at runtime, skip it
+    uint32_t numParticlesScratch; // size of particle scratch pool
+    uint32_t numParticlesStorage; // size of particle storage pool
 
+    // bonding offsets + template information or "random" and we list the bonding offsets
+    // templating for the basic crystal types
+    string bondingOffsetTemplate;
+    float bondingOffsetTemplateValues[ 6 ];
+    vector< vec3 > bondingOffsets;
+
+    // initial crystal seeding
+        // how many (minimum 1), span of distribution
+    // search radius? longer term, maybe
+    // max bonding distance
     // chance to bond
+    // bonding strategy - random of the bonding offsets available or closest bonding offset
+        // maybe this can be like "chance to randomize"
+    // static flow, dynamic flow, "wind" terms
+    // temperature
+    // defects
+        // how often a defect happens
+        // how big the position jitter is
+        // how big the rotation jitter is
+    // attrition health + oob margin
+    // information to create the spawn importance sampling structure
+    float spawnProbabilities[ 7 ];
+    uint8_t importanceStructure[ 1024 ];
+
     // what else?
 
+    uint32_t numInitialSeedParticles;
 };
 
 struct CrystalRenderConfig {
@@ -305,9 +332,7 @@ constexpr int imageWidth = 1280;
 constexpr int imageHeight = 720;
 constexpr int numPixels = imageWidth * imageHeight;
 constexpr int NUM_THREADS = 72;                     // threads of execution
-constexpr int NUM_PARTICLES = 1'000;                // size of pool of particles for the job system
 constexpr int pad = 1000;                           // some extra particles as a safety buffer
-constexpr uintmax_t maxParticles = 35'000'000 + pad;// size of pool of preallocated particle storage locations
 constexpr int GridCellMaxParticles = 128;           // this size might make sense to play with eventually
 //=================================================================================================
 struct GridCell {
