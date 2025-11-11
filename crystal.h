@@ -344,7 +344,7 @@ constexpr int gifDelay = 4;
 constexpr int imageWidth = 1280;
 constexpr int imageHeight = 720;
 constexpr int numPixels = imageWidth * imageHeight;
-constexpr int NUM_THREADS = 72;                     // threads of execution
+constexpr int NUM_THREADS = 1;                     // threads of execution
 constexpr int pad = 1000;                           // some extra particles as a safety buffer
 constexpr int GridCellMaxParticles = 128;           // this size might make sense to play with eventually
 //=================================================================================================
@@ -703,7 +703,7 @@ inline void Crystal::GenerateRandomConfig () {
     out << YAML::Key << "numParticlesScratch";
     out << YAML::Value << simConfig.numParticlesScratch;
 
-    simConfig.numParticlesStorage = 25'000'000;
+    simConfig.numParticlesStorage = 2'000'000;
     out << YAML::Key << "numParticlesStorage";
     out << YAML::Value << simConfig.numParticlesStorage;
 
