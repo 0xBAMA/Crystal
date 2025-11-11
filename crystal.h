@@ -668,7 +668,21 @@ inline void Crystal::AnchorParticle ( const ivec3 iP, const mat4 &pTransform ) {
 // respawn the particle
 inline void Crystal::RespawnParticle ( const int i ) {
     // simple importance sampling scheme
+    uint8_t pick = simConfig.importanceStructure[ std::clamp( int( uniformRNG() * 1024 ), 0, 1023 ) ];
 
+    switch ( pick ) {
+    // x faces
+    case 0: break;
+    case 1: break;
+    // y faces
+    case 2: break;
+    case 3: break;
+    // z faces
+    case 4: break;
+    case 5: break;
+    // uniform spawn
+    default: break;
+    }
 }
 //=================================================================================================
 // do an update on the particle
