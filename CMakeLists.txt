@@ -18,10 +18,13 @@ find_package( ftxui REQUIRED )
 add_executable( main main.cc )
 add_library( STB_ImageUtilsWrapper STATIC stb/impl.cc )
 
+add_subdirectory( ${PROJECT_SOURCE_DIR}/yaml-cpp-0.8.0 )
+
 target_link_libraries( main
   PUBLIC STB_ImageUtilsWrapper
   PRIVATE ftxui::screen
   PRIVATE ftxui::dom
   PRIVATE ftxui::component
+  PUBLIC yaml-cpp
 )
 
