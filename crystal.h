@@ -627,42 +627,39 @@ inline void Crystal::MonitorThreadFunction () {
         // wait for the next iteration
         sleep_for( 100ms );
     }
+    // if we drop out, indicate termination to the other threads
+    threadKill = true;
 }
 //=================================================================================================
 // worker thread, doing the particle update
 inline void Crystal::WorkerThreadFunction ( int id ) {
     // enter a loop...
     while ( !threadKill ) {
-        /*
-        If we hit the screenshot counter and get a value less than the number of pixels, we need
-            to do work to render an image, instead of the particle update...
+        /*  If we hit the screenshot counter and get a value less than the number of pixels, we need
+        to do work to render an image, instead of the particle update...
 
-        We also need to prevent running out of pointers in the pool... so check the allocator
-            if we are "close" to the maximum, we need to enter a waiting state...
-
-        I'd like to have this be a recoverable state, so if you want to shuffle the pointers and
-            reset the allocator counter at a lower number... you could resume the sim with some
-            subset of the original points... not sure. I'd like to also include interactions with
-            other hashmaps, essentially seeding from other crystals without copying all the points
-            to this crystal's hashmap
-
-        So basically:
-
-        if ( screenshot indicated ) {
-
-            do screenshot work
-
-        } else if ( particle update indicated ) {
-
-            do particle work
-
-        } else { // some other way to force this?
-
-            waiting 1ms
-
-        }
-                
+            We also need to prevent running out of pointers in the storage pool... so check the
+        allocator to see if we are "close" to the maximum, we need to enter a waiting state...
         */
+
+        // do we want screenshot work? if so, where?
+        uint32_t x, y;
+        const bool ss = ScreenshotIndicated( x, y );
+
+        // otherwise let's do particle work
+        uintmax_t i;
+        const bool work = ParticleUpdateIndicated( i );
+
+        if ( ( !ss && !work ) || pause ) {
+            sleep_for( 1ms );
+        } else if ( ss ) {
+            // we have secured work for one pixel
+            DrawPixel( x, y );
+            ++ssComplete; // helps with "percentage complete"
+        } else if ( work ) {
+            // we need to do work for one particle update, index indicated by the job counter i
+            UpdateParticle( static_cast< int >( i % simConfig.numParticlesScratch ) );
+        }
     }
 }
 //=================================================================================================
