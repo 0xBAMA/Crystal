@@ -303,7 +303,7 @@ class Crystal {
 public:
 
     // managed logger, allowing for worker threads to submit timestamped messages
-        // todo
+    // todo
 
     // threads managed by constructor/destructor
     thread monitorThread;
@@ -330,18 +330,26 @@ public:
     bool ScreenshotIndicated( uint32_t &x, uint32_t &y );       // return true for computed idx < numPixels, return by ref computed x, y
     bool ParticleUpdateIndicated( uintmax_t &jobIdx );          // return true if there is a reasonable number of particles left, ref atomic job counter value
     void ClearImage ();                                         // clear the entire image to black
-    void DrawPixel ( const uint32_t x, const uint32_t y );      // this will only touch that pixel's memory... still need sync for resources we read from
+    void DrawPixel ( uint32_t x, uint32_t y );                  // this will only touch that pixel's memory... still need sync for resources we read from
+    bool GlyphRef ( const uint8_t &c, ivec2 offset ) const;     // reference the font LUT
+    void SaveCurrentImage ( const string &filename );           // save out the current framebuffer state
+    void StampString ( const string &s, ivec2 location, ivec2 scale ); // write a string onto the image
+    void StampChar ( const uint8_t &c, ivec2 location, ivec2 scale ); // called by StampString
 
     // global sim resources (particle + pointer pools, ivec3->gridCell hashmap)    
-    vector< vec4 > particleScratch { NUM_PARTICLES };           // state for floating particles (diffusion limit mechanism) 
-    vector< shared_ptr< mat4 > > particlePool { maxParticles }; // preallocated memory buffer for particles, allows playback
-    atomic_uintmax_t particlePoolAllocator { 0u };              // bump allocator for above, enforces order
+    vector< vec4 > particleScratch{ NUM_PARTICLES };          // state for floating particles (diffusion limit mechanism)
+    vector< shared_ptr< mat4 > > particlePool{ maxParticles }; // preallocated memory buffer for particles, allows playback
+    atomic_uintmax_t particlePoolAllocator { 0u };            // bump allocator for above, enforces order
     HashMap< ivec3, shared_ptr< GridCell > > anchoredParticles; // concurrent hashmap of grid cell management pointers
 
+    // tracking sim parameters
+    ivec3 minExtents = ivec3( 0 );
+    ivec3 maxExtents = ivec3( 0 );
+
     // sim support functions
-    void AnchorParticle ();
-    void RespawnParticle ( const int i );
-    void UpdateParticle ( const int i );
+    void AnchorParticle ( int i, const mat4 &pTransform );
+    void RespawnParticle ( int i );
+    void UpdateParticle ( int i );
 
     // simulation config
     CrystalSimConfig simConfig;
@@ -350,7 +358,7 @@ public:
     void MonitorThreadFunction ();
 
     // worker thread function
-    void WorkerThreadFunction ( const int id );
+    void WorkerThreadFunction ( int id );
     
     Crystal () { // should take a YAML config or default to a randomly generated one
         // fill out the config struct based on the YAML, or generate random + YAML
@@ -372,6 +380,15 @@ public:
 
         int x, y, n; // last arg set to 1 means give me 1 channel data out 
         fontLUT = stbi_load( "fatFont.png", &x, &y, &n, 1 );
+
+        ClearImage();
+        const string s = string( "TEST 123 TEST" );
+
+        StampString( s, ivec2( 100, 200 ), ivec2( 1 ) );
+        StampString( s, ivec2( 100, 250 ), ivec2( 1, 2 ) );
+        StampString( s, ivec2( 100, 300 ), ivec2( 2, 1 ) );
+
+        SaveCurrentImage( "test.png" );
     }
 
     ~Crystal () {
@@ -387,15 +404,16 @@ public:
 //=================================================================================================
 // screenshot utilities
 //=================================================================================================
-void Crystal::ClearImage () {
+inline void Crystal::ClearImage () {
     shared_lock lock( imageMutex );
-    for ( auto& c : imageBuffer ) {
-        c = 0;
+    for ( int i = 0; i < 4 * numPixels; i += 4 ) {
+        imageBuffer[ i ] = imageBuffer[ i + 1 ] = imageBuffer[ i + 2 ] = 0;
+        imageBuffer[ i + 3 ] = 255;
     }
 }
 //=================================================================================================
 // dependent on the current renderstate ( this is called by the worker threads )
-void Crystal::DrawPixel ( const uint32_t x, const uint32_t y ) {
+inline void Crystal::DrawPixel ( const uint32_t x, const uint32_t y ) {
     constexpr float ratio = ( 21.0f / 9.0f );
     const vec2 uv = vec2( x + 0.5f, y + 0.5f ) / vec2( imageWidth, imageHeight );
 
@@ -428,9 +446,44 @@ void Crystal::DrawPixel ( const uint32_t x, const uint32_t y ) {
     imageBuffer[ baseIdx + 3 ] = 255;
 }
 //=================================================================================================
+inline bool Crystal::GlyphRef ( const uint8_t &c, const ivec2 offset ) const {
+    const ivec2 baseGlyphLoc = 7 * ivec2( ( c % 16 ), ( c / 16 ) );
+    const ivec2 samplePoint = baseGlyphLoc + offset;
+    return fontLUT[ samplePoint.x + samplePoint.y * 7 * 16 ];
+}
+//=================================================================================================
+inline void Crystal::StampString ( const string &s, ivec2 location, const ivec2 scale ) {
+    for ( const uint8_t c : s ) {
+        StampChar( c, location, scale );
+        location.x += scale.x * 8; // 7px + 1px pad
+    }
+}
+//=================================================================================================
+inline void Crystal::StampChar ( const uint8_t &c, ivec2 location, const ivec2 scale ) {
+    for ( int y = 0; y < 7 * scale.y; y++ ) {
+        for ( int x = 0; x < 7 * scale.x; x++ ) {
+            const ivec2 writeLoc = location + ivec2( x, y );
+            const ivec2 px = ivec2( x / scale.x, y / scale.y );
+
+            // check px against the font LUT
+            if ( GlyphRef( c, px ) ) {
+                uint32_t idx = 4 * ( writeLoc.x + imageWidth * writeLoc.y );
+                imageBuffer[ idx + 0 ] = 255;
+                imageBuffer[ idx + 1 ] = 255;
+                imageBuffer[ idx + 2 ] = 255;
+                imageBuffer[ idx + 3 ] = 255;
+            }
+        }
+    }
+}
+//=================================================================================================
+inline void Crystal::SaveCurrentImage ( const string &filename ) {
+    stbi_write_png( filename.c_str(), imageWidth, imageHeight, 4, &imageBuffer[ 0 ], 4 * imageWidth );
+}
+//=================================================================================================
 // particle support functions
 //=================================================================================================
-bool Crystal::ScreenshotIndicated ( uint32_t &x, uint32_t &y ) {
+inline bool Crystal::ScreenshotIndicated ( uint32_t &x, uint32_t &y ) {
     // no need to branch, we will do it one level up
     uintmax_t idx = ssDispatch.fetch_add( 1 );
     x = idx % imageWidth;
@@ -438,36 +491,63 @@ bool Crystal::ScreenshotIndicated ( uint32_t &x, uint32_t &y ) {
     return ( idx < numPixels );
 }
 //=================================================================================================
-bool Crystal::ParticleUpdateIndicated ( uintmax_t &idx ) {
-    idx = jobDispatch.fetch_add( 1 );
+inline bool Crystal::ParticleUpdateIndicated ( uintmax_t &jobIdx ) {
+    jobIdx = jobDispatch.fetch_add( 1 );
     // this makes a weaker guarantee than the screenshot atomic...
     return ( particlePoolAllocator < ( maxParticles - pad ) );
 }
 //=================================================================================================
-void Crystal::AnchorParticle () {
-    // add the particle to the hashmap
+// probably add the allocator function here
+
+//=================================================================================================
+// add the particle to the hashmap
+inline void Crystal::AnchorParticle ( const int i, const mat4 &pTransform ) {
+    const ivec3 iP = ivec3( particleScratch[ i ].xyz() );
+    shared_ptr< GridCell > gcp;
+    if ( anchoredParticles.find( iP, gcp ) ) {
+        // a GridCell already exists...
+            // we get the pointer to it in gcp
+    } else {
+        // we haven't added to this GridCell yet
+        gcp = make_shared< GridCell >();
+    }
+
+    { // lock the GridCell write mutex and add this point, if we have space
+        unique_lock lock( gcp->mutex );
+        if ( gcp->particles.size() < GridCellMaxParticles ) {
+            // increment the bump allocator
+            const shared_ptr< mat4 > ptr = particlePool[ particlePoolAllocator.fetch_add( 1 ) ];
+            // populate the value and add it to the GridCell
+            *ptr = pTransform;
+            gcp->particles.push_back( ptr );
+        }
+    }
+
+    // update statistics
+    minExtents = glm::min( iP, minExtents );
+    maxExtents = glm::max( iP, maxExtents );
+}
+//=================================================================================================
+// respawn the particle
+inline void Crystal::RespawnParticle ( const int i ) {
+    // this has to depend on some sim parameters
 
 }
 //=================================================================================================
-void Crystal::RespawnParticle ( const int i ) {
-    // respawn the particle
-    
-}
-//=================================================================================================
-void Crystal::UpdateParticle ( const int i ) {
-    // do an update on the particle
-        
+// do an update on the particle
+inline void Crystal::UpdateParticle ( const int i ) {
+
 }
 //=================================================================================================
 // this is the master thread over the worker threads on the crystal object
-void Crystal::MonitorThreadFunction () {
+inline void Crystal::MonitorThreadFunction () {
     // enter a loop
     while ( true ) {
         // how do we quit? something indicated from the master
             // we will need a number of atomic signals... screenshot(atomic) + config, quit(atomic),
             // reset(atomic)
 
-        // triggering a screenshot is like, 
+        // triggering a screenshot is like,
 
         // what do we monitor?
             // some kind of flag we watch to indicate master wants a screenshot
@@ -482,7 +562,7 @@ void Crystal::MonitorThreadFunction () {
 }
 //=================================================================================================
 // worker thread, doing the particle update
-void Crystal::WorkerThreadFunction ( int id ) {
+inline void Crystal::WorkerThreadFunction ( int id ) {
     // enter a loop...
     while ( !threadKill ) {
         /*
