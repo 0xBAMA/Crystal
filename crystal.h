@@ -407,7 +407,7 @@ public:
     ivec3 maxExtents = ivec3( -1000 );
 
     // sim support functions
-    void AnchorParticle ( int i, const mat4 &pTransform );
+    void AnchorParticle ( ivec3 iP, const mat4 &pTransform );
     void RespawnParticle ( int i );
     void UpdateParticle ( int i );
 
