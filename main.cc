@@ -13,6 +13,7 @@ std::string ssString = "Screenshot";
 
 // list of crystals
 constexpr int numCrystalsMax = 8;
+bool showCrystal[ numCrystalsMax ] = { false };
 vector< shared_ptr< Crystal > > crystals;
 
 // struct crystalListItem {
@@ -136,6 +137,7 @@ int main ( int argc, char** argv ) {
                             .on_click = [&] () {
                                 // this also needs to update the menu stuff with the information for the new crystal
                                 crystals.push_back( make_shared< Crystal >() );
+                                // crystals.
                             },
                         }),
                         Button({
@@ -163,7 +165,7 @@ int main ( int argc, char** argv ) {
                 Components c;
                 for ( int i = 0; i < numCrystalsMax; i++ ) {
                     const int iC = i;
-                    c.push_back( Maybe( Container::Vertical({
+                    c.push_back( Container::Vertical({
                         Renderer([&] {
                             return( vbox({
                                 hbox({ text( "Crystal " + to_string( iC ) ) | center, border( gauge( crystals[ iC ]->percentageCompletion ) ) } ),
@@ -173,8 +175,7 @@ int main ( int argc, char** argv ) {
                             Button( &saveString, [&] () { crystals[ iC ]->Save(); } ),
                             Button( &ssString, [&] () { crystals[ iC ]->Screenshot(); } )
                         })
-                    // }), [&] () { return iC < crystals.size(); } ) );
-                    }), [&] () { return iC % 2; } ) );
+                    }) | Maybe( [&] () { return iC < crystals.size(); } ) );
                 }
                 return Container::Vertical(c );
             }(),
