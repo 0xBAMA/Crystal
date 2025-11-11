@@ -192,6 +192,9 @@ vec3 magma(float t) {
 //=================================================================================================
 // random number generation utilities
 #include "random.h"
+// RNG objects for uniform and normal distributions
+inline thread_local rng uniformRNG( 0.0f, 1.0f );
+inline thread_local rngN normalRNG( 0.0f, 0.1f );
 //===== STB =======================================================================================
 // Sean Barrett's public domain load, save, resize libs - need corresponding define in the ./stb/impl.cc file,
 	// before their inclusion, which is done by the time compilation hits this point - they can be straight
@@ -331,10 +334,6 @@ public:
     void AnchorParticle ( int i, const mat4 &pTransform );
     void RespawnParticle ( int i );
     void UpdateParticle ( int i );
-
-    // RNG objects for uniform and normal distributions
-    thread_local rng uniformRNG( 0.0f, 1.0f );
-    thread_local rngN normalRNG( 0.0f, 0.1f );
 
     // simulation config
     CrystalSimConfig simConfig;
