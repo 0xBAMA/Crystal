@@ -270,7 +270,7 @@ void respawnParticle ( vec4 &p ) {
     p.y = glm::mix( minExtents.y - margin, maxExtents.y + margin, pick() );
     p.z = glm::mix( minExtents.z - margin, maxExtents.z + margin, pick() );
 
-    switch ( 3 + int( std::floor( pick() * 10.0f ) ) ) {
+    switch ( int( std::floor( pick() * 3.0f ) ) ) {
     // switch ( 0 ) {
         // we will be on one of the parallel x faces, flatten
         case 0: p.x = face ? minExtents.x - margin : maxExtents.x + margin; break;
@@ -644,13 +644,15 @@ void prepareOutputFrameDeltaTracking ( bool rebuildMap, vector< uint8_t > &data,
                         vec3 rD = inverseTransform * vec4( 0.0f, 0.0f, 1.0f, 0.0f );
 
                         // track the ray from the eye through the volume...
+                        int maxDistance = std::ceil( glm::distance( minExtentsIn, maxExtentsIn ) );
                         float tMin, tMax;
                         if ( IntersectAABB( rO, rD, minExtentsIn, maxExtentsIn, tMin, tMax ) ) {
                             // color = vec3( 1.0f, 0.0f, 0.0f );
-                            vec3 p = rO + max( 0.0f, tMin ) * rD;
+                            // vec3 p = rO + max( 0.0f, tMin ) * rD;
+                            vec3 p = rO + tMin * rD;
                             constexpr int samples = 128;
                             for ( int s = 0; s < samples; s++ ) {
-                                for ( int i = 0; i < 500; i++ ) {
+                                for ( int i = 0; i < maxDistance; i++ ) {
                                     float t = -log( pick() );
                                     p += t * rD;
 
@@ -1039,8 +1041,9 @@ int main () {
         prepareOutputFrameDeltaTracking( ( i <= frames ), dataVec, particlesPerStep * frame,
             glm::mix( minExtentsData[ f ], minExtentsData[ f + 1 ], 0.5f ),
             glm::mix( maxExtentsData[ f], maxExtentsData[ f + 1 ], 0.5f ),
-            glm::scale( glm::rotate( identity, frame * 0.003f, glm::normalize( vec3( 0.7f, 1.0f, 0.8f ) ) ), vec3( glm::mix( 1.1f, 0.9f, glm::smoothstep( float( frame ) / float( frames ), 0.0f, 1.0f ) ) ) ),
-            sunDirection );
+            glm::scale( glm::rotate( identity, frame * 0.003f, glm::normalize( vec3( 0.7f, 1.0f, 0.8f ) ) ),
+                vec3( ( 2.0f / distance( glm::mix( minExtentsData[ f ], minExtentsData[ f + 1 ], 0.5f ), glm::mix( maxExtentsData[ f], maxExtentsData[ f + 1 ], 0.5f ) ) ) *
+                glm::mix( 1.1f, 0.9f, glm::smoothstep( float( frame ) / float( frames ), 0.0f, 1.0f ) ) ) ), sunDirection );
 
         GifWriteFrame( &g, dataVec.data(), imageWidth, imageHeight, gifDelay );
         cout << "finished frame " << frame << " / " << frames + 400 << endl;
