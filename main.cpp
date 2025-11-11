@@ -32,21 +32,32 @@ using std::lock_guard;
 using std::clamp;
 using std::max;
 //=================================================================================================
-// thread stuff
-#include <thread>
-using std::thread;
-using std::this_thread::sleep_for;
-//=================================================================================================
-// shared_ptr
-#include <memory>
-using std::make_shared;
-using std::shared_ptr;
-//=================================================================================================
 // specific width types + atomics, for "program counter"
 #include <cstdint>
 #include <atomic>
 using std::uintmax_t;
 using std::atomic_uintmax_t;
+//=================================================================================================
+// thread stuff
+#include <thread>
+using std::thread;
+using std::this_thread::sleep_for;
+//=================================================================================================
+// for dispatching particle updates
+atomic_uintmax_t jobCounter { 0 };
+const uintmax_t maxParticles = 35'000'000;
+const uintmax_t particlesPerStep = 100'000;
+
+// threadpool setup
+constexpr int NUM_THREADS = 72;
+bool threadFences[ NUM_THREADS ];
+bool threadKill;
+std::thread threads[ NUM_THREADS ];
+//=================================================================================================
+// shared_ptr
+#include <memory>
+using std::make_shared;
+using std::shared_ptr;
 //=================================================================================================
 // Terminal UI output
 #include <ftxui/dom/elements.hpp>
@@ -254,7 +265,7 @@ thread_local rngN jitter( 0.0f, 0.1f );
 void respawnParticle ( vec4 &p ) {
     // const bool face = ( pick() < 0.5f );
     const bool face = true;
-    constexpr float margin = 5.0f;
+    constexpr float margin = 0.0f;
     p.x = glm::mix( minExtents.x - margin, maxExtents.x + margin, pick() );
     p.y = glm::mix( minExtents.y - margin, maxExtents.y + margin, pick() );
     p.z = glm::mix( minExtents.z - margin, maxExtents.z + margin, pick() );
@@ -521,7 +532,9 @@ void prepareOutputFrame ( vector< uint8_t > &data, const int count, const vec3 m
     }
 }
 
-void prepareOutputFrameDeltaTracking ( vector< uint8_t > &data, const int count, const vec3 minExtentsIn, const vec3 maxExtentsIn, mat4 transform  ) {
+static int maxCount = 0;
+static CTSL::HashMap< ivec3, vec4 > voxelModel;
+void prepareOutputFrameDeltaTracking ( bool rebuildMap, vector< uint8_t > &data, const int count, const vec3 minExtentsIn, const vec3 maxExtentsIn, mat4 transform, vec3 lightDirection ) {
 
     /// from wrighter:
     /*
@@ -550,127 +563,154 @@ void prepareOutputFrameDeltaTracking ( vector< uint8_t > &data, const int count,
         }
     */
 
+    if ( rebuildMap ) {
     // prepare the hashmap... we only need color + density
-    int maxCount = 0;
-    CTSL::HashMap< ivec3, vec4 > voxelModel;
+        cout << "constructing frame hashmap " << endl;
+        voxelModel.clear();
+        maxCount = 0;
+        
+        ivec3 minExtentComputed = ivec3( 1000 );
+        ivec3 maxExtentComputed = ivec3( -1000 );
 
-    ivec3 minExtentComputed = ivec3( 1000 );
-    ivec3 maxExtentComputed = ivec3( -1000 );
+        for ( int i = 0; i < count; i++ ) {
+            shared_ptr< mat4 > ptr = pointerPool[ i ];
+            vec4 p = *ptr * p0;
+            ivec3 iP = ivec3( p.xyz() );
 
-    for ( int i = 0; i < count; i++ ) {
-        shared_ptr< mat4 > ptr = pointerPool[ i ];
-        vec4 p = *ptr * p0;
-        ivec3 iP = ivec3( p.xyz() );
+            vec4 temp;
+            vec4 col = vec4( glm::mix( color1, color2, float( i ) / float( count ) ), 1.0f );
+            if ( voxelModel.find( iP, temp ) ) {
+                temp += col;
+            } else {
+                temp = col;
+            }
 
-        vec4 temp;
-        vec4 col = vec4( glm::mix( color1, color2, float( i ) / float( count ) ), 1.0f );
-        if ( voxelModel.find( iP, temp ) ) {
-            temp += col;
-        } else {
-            temp = col;
+            minExtentComputed = min( minExtentComputed, iP );
+            maxExtentComputed = max( maxExtentComputed, iP );
+            maxCount = max( int( temp.a ), maxCount );
+            voxelModel.insert( iP, temp );
         }
 
-        minExtentComputed = min( minExtentComputed, iP );
-        maxExtentComputed = max( maxExtentComputed, iP );
-        maxCount = max( int( temp.a ), maxCount );
-        voxelModel.insert( iP, temp );
-    }
-
-    // normalizing...
-    for ( int x = -minExtentComputed.x; x <= maxExtentComputed.x; x++ ) {
-        for ( int y = -minExtentComputed.y; y <= maxExtentComputed.y; y++ ) {
-            for ( int z = -minExtentComputed.z; z <= maxExtentComputed.z; z++ ) {
-                vec4 temp;
-                const ivec3 p = ivec3( x, y, z );
-                if ( voxelModel.find( p, temp ) ) {
-                    temp.x = temp.x / temp.w; // averaged color
-                    temp.y = temp.y / temp.w;
-                    temp.z = temp.z / temp.w;
-                    temp.w = temp.w / maxCount; // normalized density
-                    voxelModel.insert( p, temp );
+        // normalizing...
+        for ( int x = -minExtentComputed.x; x <= maxExtentComputed.x; x++ ) {
+            for ( int y = -minExtentComputed.y; y <= maxExtentComputed.y; y++ ) {
+                for ( int z = -minExtentComputed.z; z <= maxExtentComputed.z; z++ ) {
+                    vec4 temp;
+                    const ivec3 p = ivec3( x, y, z );
+                    if ( voxelModel.find( p, temp ) ) {
+                        temp.x = temp.x / temp.w; // averaged color
+                        temp.y = temp.y / temp.w;
+                        temp.z = temp.z / temp.w;
+                        temp.w = pow( temp.w / maxCount, 1.0f ); // normalized density
+                        voxelModel.insert( p, temp );
+                    }
                 }
             }
         }
+        cout << "done." << endl;
     }
 
     const vec3 midPoint = ( minExtentsIn + maxExtentsIn ) / 2.0f;
 
-    //  for every pixel
-    constexpr float ratio = ( 21.0f / 9.0f );
-    for ( int y = 0; y < imageHeight; y++ ) {
-        for ( int x = 0; x < imageWidth; x++ ) {
-            // base pixel index
-            const int idx = 4 * ( x + y * imageWidth );
+    thread renderThreads[ NUM_THREADS ];
+    atomic_uintmax_t renderThreadDispatch{ 0 };
 
-            // black bar check
-            if ( const vec2 uv = vec2( x + 0.5f, y + 0.5f ) / vec2( imageWidth, imageHeight );
-            glm::all( glm::lessThan( uv, vec2( 1, 1.0f - 0.5f / ratio ) ) ) &&
-            glm::all( glm::greaterThan( uv, vec2( 0, 0.5f / ratio ) ) ) ) {
+    const int numPixels = imageWidth * imageHeight;
+    for ( auto& t : threads ) {
+        t = thread( [&] () {
+            while ( true ) {
+                int pixel = renderThreadDispatch.fetch_add( 1 );
+                if ( pixel < numPixels ) {
+                    // render a pixel
+                    const int x = pixel % imageWidth;
+                    const int y = pixel / imageWidth;
 
-                // you are inside the image... do the delta tracking raymarch
-                vec3 color = vec3( 0.0f );
+                    const int idx = 4 * pixel;
 
-                // camera setup
-                    // origin, direction
-                vec2 uvAdjust = ( uv - vec2( 0.5f, 0.5f ) ) * vec2( 1.0f, float( imageHeight ) / float( imageWidth ) );
-                mat4 inverseTransform = glm::inverse( transform );
-                vec3 rO = inverseTransform * vec4( vec3( 200.0f * uvAdjust, -40 ), 1.0f );
-                vec3 rD = inverseTransform * vec4( 0.0f, 0.0f, 1.0f, 0.0f );
+                    // black bar check
+                    constexpr float ratio = ( 21.0f / 9.0f );
+                    if ( const vec2 uv = vec2( x + 0.5f, y + 0.5f ) / vec2( imageWidth, imageHeight );
+                    glm::all( glm::lessThan( uv, vec2( 1, 1.0f - 0.5f / ratio ) ) ) &&
+                    glm::all( glm::greaterThan( uv, vec2( 0, 0.5f / ratio ) ) ) ) {
 
-                // track the ray from the eye through the volume...
-                float tMin, tMax;
-                if ( IntersectAABB( rO, rD, minExtentsIn, maxExtentsIn, tMin, tMax ) ) {
-                    // color = vec3( 1.0f, 0.0f, 0.0f );
-                    vec3 p = rO;
-                    constexpr int samples = 10;
-                    for ( int s = 0; s < samples; s++ ) {
-                        for ( int i = 0; i < 200; i++ ) {
-                            float t = -log( pick() );
-                            p += t * rD;
-                            vec4 temp;
-                            if ( voxelModel.find( ivec3( p ), temp ) ) {
-                                if ( temp.a > pick() ) { // this is the hit condition...
-                                    // do we hit something, going up?
-                                    vec3 pShadow = p;
-                                    float shadowTerm = 1.0f;
+                        // you are inside the image... do the delta tracking raymarch
+                        vec3 color = vec3( 0.0f );
 
-                                    for ( int j = 0; j < 200; j++ ) {
-                                        pShadow += -log( pick() );
-                                        vec4 tempShadow;
-                                        if ( voxelModel.find( ivec3( pShadow ), tempShadow ) ) {
-                                            if  ( temp.a > pick() || j > 195 ) {
-                                                shadowTerm = 0.1f;
-                                            }
-                                        }
+                        // camera setup
+                            // origin, direction
+                        vec2 uvAdjust = ( uv - vec2( 0.5f, 0.5f ) ) * vec2( 1.0f, float( imageHeight ) / float( imageWidth ) );
+                        mat4 inverseTransform = glm::inverse( transform );
+                        vec3 rO = inverseTransform * vec4( vec3( 200.0f * uvAdjust, -40 ), 1.0f );
+                        vec3 rD = inverseTransform * vec4( 0.0f, 0.0f, 1.0f, 0.0f );
+
+                        // track the ray from the eye through the volume...
+                        float tMin, tMax;
+                        if ( IntersectAABB( rO, rD, minExtentsIn, maxExtentsIn, tMin, tMax ) ) {
+                            // color = vec3( 1.0f, 0.0f, 0.0f );
+                            vec3 p = rO + max( 0.0f, tMin ) * rD;
+                            constexpr int samples = 128;
+                            for ( int s = 0; s < samples; s++ ) {
+                                for ( int i = 0; i < 500; i++ ) {
+                                    float t = -log( pick() );
+                                    p += t * rD;
+
+                                    if ( glm::any( glm::lessThanEqual( p, vec3( minExtentsIn ) ) ) ||
+                                        glm::any( glm::greaterThanEqual( p, vec3( maxExtentsIn ) ) ) ) {
+                                        // oob
+                                        break;
                                     }
 
-                                    color += vec3( temp.xyz() * shadowTerm );
-                                    break;
+                                    vec4 temp;
+                                    if ( voxelModel.find( ivec3( p ), temp ) ) {
+                                        if ( temp.a > pick() ) { // this is the hit condition...
+                                            // do we hit something, going up?
+                                            vec3 pShadow = p;
+                                            float shadowTerm = 1.0f;
+
+                                            for ( int j = 0; j < 50; j++ ) {
+                                                pShadow += lightDirection * float( -log( pick() ) );
+                                                vec4 tempShadow;
+                                                if ( voxelModel.find( ivec3( pShadow ), tempShadow ) ) {
+                                                    if  ( temp.a > pick() || j > 195 ) {
+                                                        shadowTerm = 0.1f;
+                                                    }
+                                                }
+                                            }
+
+                                            color += vec3( temp.xyz() * shadowTerm ) / float( 4 * samples );
+                                            break;
+                                        }
+                                    }
                                 }
                             }
                         }
+
+                        data[ idx + 0 ] = static_cast< uint8_t >( clamp( color.r * 255.0f, 0.0f, 255.0f ) );
+                        data[ idx + 1 ] = static_cast< uint8_t >( clamp( color.g * 255.0f, 0.0f, 255.0f ) );
+                        data[ idx + 2 ] = static_cast< uint8_t >( clamp( color.b * 255.0f, 0.0f, 255.0f ) );
+                        data[ idx + 3 ] = 255;
+
+                    } else {
+                        // you are inside the black area, color black
+                        for ( int i = 0; i < 3; i++ ) {
+                            data[ idx + i ] = 0;
+                        }
+                        data[ idx + 3 ] = 255;
                     }
-                    color /= samples;
+                } else {
+                    break;
                 }
-
-                data[ idx + 0 ] = static_cast< uint8_t >( clamp( color.r * 255.0f, 0.0f, 255.0f ) );
-                data[ idx + 1 ] = static_cast< uint8_t >( clamp( color.g * 255.0f, 0.0f, 255.0f ) );
-                data[ idx + 2 ] = static_cast< uint8_t >( clamp( color.b * 255.0f, 0.0f, 255.0f ) );
-                data[ idx + 3 ] = 255;
-
-            } else {
-                // you are inside the black area, color black
-                for ( int i = 0; i < 3; i++ ) {
-                    data[ idx + i ] = 0;
-                }
-                data[ idx + 3 ] = 255;
             }
-        }
+        });
+    }
+
+    for ( auto& t : threads ) {
+        t.join();
     }
 }
 
 void prepareOutputScreenshotDeltaTracking () {
-    prepareOutputFrameDeltaTracking( screenshotBufferData, pointerPoolAllocator, minExtents, maxExtents, glm::rotate( identity, 0.5f, glm::normalize( vec3( 0.7f, 1.0f, 0.8f ) ) ) );
+    prepareOutputFrameDeltaTracking( true, screenshotBufferData, pointerPoolAllocator, minExtents, maxExtents, glm::rotate( identity, 0.5f, glm::normalize( vec3( 0.7f, 1.0f, 0.8f ) ) ), normalize( vec3( 1.0f ) ) );
 
     auto now = std::chrono::system_clock::now();
     auto inTime_t = std::chrono::system_clock::to_time_t( now );
@@ -694,17 +734,7 @@ void prepareOutputScreenshot () {
     stbi_write_png( ssA.str().c_str(), imageWidth, imageHeight, 4, &screenshotBufferData[ 0 ], 4 * imageWidth );
 }
 
-//=================================================================================================
-// for dispatching particle updates
-atomic_uintmax_t jobCounter { 0 };
-const uintmax_t maxParticles = 50'000'000;
-const uintmax_t particlesPerStep = 100'000;
 
-// threadpool setup
-constexpr int NUM_THREADS = 72;
-bool threadFences[ NUM_THREADS ];
-bool threadKill;
-std::thread threads[ NUM_THREADS ];
 
 //=================================================================================================
 #include "reporter.h" // proc filesystem reading
@@ -716,6 +746,11 @@ int main () {
 
     // allocate space for the screenshot
     screenshotBufferData.resize( imageWidth * imageHeight * 4 );
+
+    // new random colors
+    color1 = vec3( 1.0f );
+    // color2 = vec3( 0.8f * pick() + 0.1f, 0.3f * pick() + 0.7f, 0.5f * pick() + 0.5f );
+    color2 = vec3( 1.0f, 0.5f + 0.5f * pick(), 0.3f + 0.7f * pick() );
 
     // setting initial program state
     threadKill = false;
@@ -739,8 +774,8 @@ int main () {
     // an initial point in the model, so we have something to bond to
     cout << "Anchoring Initial Seed Particles... ";
     rng pR( -2.0f, 2.0f );
-    for ( int i = 0; i < 2000; i++ ) {
-        mat4 transform = glm::rotate( glm::translate( identity, 10.0f * vec3( ( 2.0f * pick() - 1.0f ), ( 2.0f * pick() - 1.0f ), pick() ) ), 10.0f * pR(), glm::normalize( vec3( jitter(), jitter(), jitter() ) ) );
+    for ( int i = 0; i < 20; i++ ) {
+        mat4 transform = glm::rotate( glm::translate( identity, 10.0f * vec3( 3.0f * ( 2.0f * pick() - 1.0f ), ( 2.0f * pick() - 1.0f ), pick() ) ), 10.0f * pR(), glm::normalize( vec3( jitter(), jitter(), jitter() ) ) );
         anchorParticle( transform * p0, transform );
     }
     cout << "Done." << endl;
@@ -748,13 +783,13 @@ int main () {
     // we need to pick a set of offsets to use for the crystal growth...
         // start with a "tetragonal", which will emphasize orientation because it has longer offsets along one axis
     // the angle is uniform, so we will leave this as just a nonuniformly scaled basis...
-    const float xXx = 0.1618f;
-    const float yYy = 0.618f;
+    const float xXx = 0.1618f + 0.3f * pick();
+    const float yYy = 0.618f + 0.1f * jitter();
     const float zZz = 0.618f;
 
     const float pi = 3.1415926535f;
-    const mat4 rX = glm::rotate( identity, 0.0f, normalize( vec3( 0.0f, 0.0f, 1.0f ) ) );
-    const mat4 rY = glm::rotate( identity, 0.0f * pi, normalize( vec3( 0.0f, 0.0f, 1.0f ) ) );
+    const mat4 rX = glm::rotate( identity, 0.0f + pick(), normalize( vec3( 0.0f, 0.0f, 1.0f ) ) );
+    const mat4 rY = glm::rotate( identity, pick() * pi / 2.0f, normalize( vec3( 0.0f, 0.0f, 1.0f ) ) );
     const mat4 rZ = glm::rotate( identity, pi / 5.0f, normalize( vec3( 1.0f, 0.0f, 0.0f ) ) );
 
     // note that 6 bonding points is in no way a constraint here
@@ -918,29 +953,29 @@ int main () {
     reporterThread.join();
     cout << "Terminating....................... Done." << endl;
 
-    // int frames = pointerPoolAllocator / particlesPerStep;
-    // cout << " Rendering Animation Consisting of " << frames << " frames" << endl;
+    int frames = pointerPoolAllocator / particlesPerStep;
+    cout << " Rendering Animation Consisting of " << frames << " frames" << endl;
     // atomic_uintmax_t frameDispatcher{ 0 };
-    //
+    
     // // the bulk data storage vector
     // vector< vector< uint8_t > > frameData;
-    // vec3 pInit = ( *pointerPool[ 0 ] * p0 ).xyz();
-    // vector< vec3 > minExtentsData; vec3 runningMin = pInit;
-    // vector< vec3 > maxExtentsData; vec3 runningMax = pInit;
-    //
-    // for ( int i = 0; i <= frames; i++ ) {
+    vec3 pInit = ( *pointerPool[ 0 ] * p0 ).xyz();
+    vector< vec3 > minExtentsData; vec3 runningMin = pInit;
+    vector< vec3 > maxExtentsData; vec3 runningMax = pInit;
+    
+    for ( int i = 0; i <= frames; i++ ) {
     //     frameData.emplace_back( 4 * imageWidth * imageHeight );
-    //     for ( int j = 0; j < particlesPerStep; j++ ) {
-    //         const int idx = std::min( int( i * particlesPerStep + j ), int( numAnchored ) );
-    //         const vec3 p = ( *pointerPool[ idx ] * p0 ).xyz();
-    //         runningMin = glm::min( runningMin, p );
-    //         runningMax = glm::max( runningMax, p );
-    //     }
-    //     minExtentsData.emplace_back( runningMin );
-    //     maxExtentsData.emplace_back( runningMax );
-    // }
-    // minExtentsData.emplace_back( runningMin );
-    // maxExtentsData.emplace_back( runningMax );
+        for ( int j = 0; j < particlesPerStep; j++ ) {
+            const int idx = std::min( int( i * particlesPerStep + j ), int( numAnchored ) );
+            const vec3 p = ( *pointerPool[ idx ] * p0 ).xyz();
+            runningMin = glm::min( runningMin, p );
+            runningMax = glm::max( runningMax, p );
+        }
+        minExtentsData.emplace_back( runningMin );
+        maxExtentsData.emplace_back( runningMax );
+    }
+    minExtentsData.emplace_back( runningMin );
+    maxExtentsData.emplace_back( runningMax );
 
     // cout << "Allocated space:" << endl;
     // for ( auto& frame : frameData ) {
@@ -980,26 +1015,12 @@ int main () {
         } );
     }
 
-
     // terminate everyone
     for ( auto& thread : renderThreads ) {
         thread.join();
     }
      */
 
-
-    // const uintmax_t ptrAllocateCache = pointerPoolAllocator;
-    // for ( int i = 5000; i < ptrAllocateCache; i += 5000 ) {
-        // pointerPoolAllocator = i;
-        // prepareOutputGIFFrame( &g );
-    // }
-    // cout << endl << "Done." << endl;
-
-    // example "lossless" conversion from gif to mp4
-    // ffmpeg -i in.gif -c:v libx264 -preset veryslow -qp 0 output.mp4
-
-    // init gif writing
-    /*
     GifWriter g;
 	auto now = std::chrono::system_clock::now();
 	auto inTime_t = std::chrono::system_clock::to_time_t( now );
@@ -1007,17 +1028,33 @@ int main () {
 	ssA << std::put_time( std::localtime( &inTime_t ), "Crystal-%Y-%m-%d at %H-%M-%S.gif" );
 	GifBegin( &g, ssA.str().c_str() , imageWidth, imageHeight, gifDelay );
 
-	cout << "Prepping GIF file..." << std::flush;
-    for ( int i = 0; i < frameData.size(); i++ ) {
-        GifWriteFrame( &g, frameData[ i ].data(), imageWidth, imageHeight, gifDelay );
+    vector< uint8_t > dataVec;
+    dataVec.resize( imageWidth * imageHeight * 4 );
+    const uintmax_t ptrAllocateCache = pointerPoolAllocator;
+    int frame = frames;
+    for ( int i = frames; i < frames + 400; i++ ) {
+        pointerPoolAllocator = std::min( uintmax_t( ptrAllocateCache ), uintmax_t( i * particlesPerStep ) );
+        int f = std::min( frame, int( frames ) );
+        vec3 sunDirection = glm::rotate( identity, frame * 0.01f, vec3( 1.0f, 2.0f, 4.0f ) ) * v0;
+        prepareOutputFrameDeltaTracking( ( i <= frames ), dataVec, particlesPerStep * frame,
+            glm::mix( minExtentsData[ f ], minExtentsData[ f + 1 ], 0.5f ),
+            glm::mix( maxExtentsData[ f], maxExtentsData[ f + 1 ], 0.5f ),
+            glm::scale( glm::rotate( identity, frame * 0.003f, glm::normalize( vec3( 0.7f, 1.0f, 0.8f ) ) ), vec3( glm::mix( 1.1f, 0.9f, glm::smoothstep( float( frame ) / float( frames ), 0.0f, 1.0f ) ) ) ),
+            sunDirection );
+
+        GifWriteFrame( &g, dataVec.data(), imageWidth, imageHeight, gifDelay );
+        cout << "finished frame " << frame << " / " << frames + 400 << endl;
+        frame++;
     }
-
+	cout << "Prepping GIF file" << ssA.str() << "..." << std::flush;
     GifEnd( &g );
-    cout << " Done." << endl;
-     */
+    cout << endl << "Done." << endl;
 
-    prepareOutputScreenshot();
-    prepareOutputScreenshotDeltaTracking();
+    // example "lossless" conversion from gif to mp4
+    // ffmpeg -i in.gif -c:v libx264 -preset veryslow -qp 0 output.mp4
+
+    // prepareOutputScreenshot();
+    // prepareOutputScreenshotDeltaTracking();
 
 	return 0;
 }
