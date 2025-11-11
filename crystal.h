@@ -369,10 +369,12 @@ public:
 
     // used signal termination to the worker threads
     atomic< bool > threadKill = false;
+    atomic< bool > pause = false;
 
     // job counter + screenshot trigger
     atomic_uintmax_t jobDispatch = 0;
     atomic_uintmax_t ssDispatch = numPixels + 1;                // prime it so that it will not indicate a screenshot at init
+    atomic_uintmax_t ssComplete = 0;
 
     // scratch buffer to render an image
     uint8_t imageBuffer[ numPixels * 4 ];
