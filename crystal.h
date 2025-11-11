@@ -604,7 +604,7 @@ inline bool Crystal::ScreenshotIndicated ( uint32_t &x, uint32_t &y ) {
 inline bool Crystal::ParticleUpdateIndicated ( uintmax_t &jobIdx ) {
     jobIdx = jobDispatch.fetch_add( 1 );
     // this makes a weaker guarantee than the screenshot atomic...
-    return ( particlePoolAllocator < ( maxParticles - pad ) );
+    return ( particleStorageAllocator < ( simConfig.numParticlesStorage - pad ) );
 }
 //=================================================================================================
 // probably add the allocator function here
@@ -639,8 +639,7 @@ inline void Crystal::GenerateRandomConfig () {
 }
 //=================================================================================================
 // add the particle to the hashmap
-inline void Crystal::AnchorParticle ( const int i, const mat4 &pTransform ) {
-    const ivec3 iP = ivec3( particleScratch[ i ].xyz() );
+inline void Crystal::AnchorParticle ( const ivec3 iP, const mat4 &pTransform ) {
     shared_ptr< GridCell > gcp;
     if ( anchoredParticles.find( iP, gcp ) ) {
         // a GridCell already exists...
@@ -654,7 +653,7 @@ inline void Crystal::AnchorParticle ( const int i, const mat4 &pTransform ) {
         unique_lock lock( gcp->mutex );
         if ( gcp->particles.size() < GridCellMaxParticles ) {
             // increment the bump allocator
-            const shared_ptr< mat4 > ptr = particlePool[ particlePoolAllocator.fetch_add( 1 ) ];
+            const shared_ptr< mat4 > ptr = particleStorage[ particleStorageAllocator.fetch_add( 1 ) ];
             // populate the value and add it to the GridCell
             *ptr = pTransform;
             gcp->particles.push_back( ptr );
