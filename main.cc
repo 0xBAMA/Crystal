@@ -35,6 +35,8 @@ int main ( int argc, char** argv ) {
 			
         // Crystal c;
 
+	    auto screen = ScreenInteractive::FixedSize( 80, 20 );
+
 	    // some test config flags
 	    bool checked[3] = { false, false, false };
         cout << "Done." << endl;
@@ -54,9 +56,18 @@ int main ( int argc, char** argv ) {
                  return vbox( accum );
              }) | borderHeavy | flex_shrink,
                  Container::Vertical({
-                    Checkbox( "Check me", &checked[ 0 ] ),
-                    Checkbox( "Check me", &checked[ 1 ] ),
-                    Checkbox( "Check me", &checked[ 2 ] ), } ) | borderRounded | flex_grow } ),
+                    // Checkbox( "Check me", &checked[ 0 ] ),
+                    // Checkbox( "Check me", &checked[ 1 ] ),
+                    // Checkbox( "Check me", &checked[ 2 ] ),
+                    Button({
+                        .label = "Add Crystal",
+                        .on_click = [&] () { crystals.push_back( make_shared< Crystal >() ); },
+                    }),
+                    Button({
+                       .label = "Quit",
+                       .on_click = screen.ExitLoopClosure(),
+                     }),
+                 } ) | borderRounded | flex_grow } ),
              Slider( "Temperature", &temperature, 0.0f, 69.0f ),
              Renderer( [&] ( bool focused ) {
                  auto c1 = color( Color::RGB( 255, 34, 0 ) );
@@ -77,9 +88,9 @@ int main ( int argc, char** argv ) {
         int num = 0;
         auto right = Renderer([&] {
             Elements e;
-            for ( int i = 0; i < num; i++ ) {
+            for ( int i = 0; i < crystals.size(); i++ ) {
                 // this is just placeholder right now, it will be a list of info on each running crystal
-                e.push_back( text( "right" ) | center );
+                e.push_back( hbox({ text( "Crystal" + to_string( i ) ) | center, border( gauge( num / 1000.0f ) ) }) );
             }
             return vbox( e );
         });
@@ -97,7 +108,6 @@ int main ( int argc, char** argv ) {
          // CPU activity
          // display table of Crystal activity
 
-	    auto screen = ScreenInteractive::FixedSize( 80, 20 );
             auto ftxDAG = CatchEvent( component, [&]( Event event ) {
              if ( event == Event::Character('q') ) {
                  screen.ExitLoopClosure()();
