@@ -413,6 +413,8 @@ public:
 
     // simulation config
     CrystalSimConfig simConfig;
+    void LoadSpecifiedConfig ( const string& path );
+    void GenerateRandomConfig ();
 
     // monitor thread function
     void MonitorThreadFunction ();
@@ -604,7 +606,35 @@ inline bool Crystal::ParticleUpdateIndicated ( uintmax_t &jobIdx ) {
 }
 //=================================================================================================
 // probably add the allocator function here
+inline void Crystal::LoadSpecifiedConfig ( const string &path ) {
+    // load a YAML string from a file
 
+}
+//=================================================================================================
+inline void Crystal::GenerateRandomConfig () {
+
+    YAML::Emitter out;
+    out << YAML::BeginMap;
+
+    simConfig.numParticlesScratch = 1000;
+    out << YAML::Key << "numParticlesScratch";
+    out << YAML::Value << simConfig.numParticlesScratch;
+
+    simConfig.numParticlesStorage = 25'000'000;
+    out << YAML::Key << "numParticlesStorage";
+    out << YAML::Value << simConfig.numParticlesStorage;
+
+    simConfig.numInitialSeedParticles = std::max( uint32_t( pow( uniformRNG(), 4.0f ) * 200 ), 1u );
+    out << YAML::Key << "numInitialSeedParticles";
+    out << YAML::Value << simConfig.numInitialSeedParticles;
+
+
+
+    out << YAML::EndMap;
+
+    cout << "Configured:" << endl;
+    cout << out.c_str() << endl;
+}
 //=================================================================================================
 // add the particle to the hashmap
 inline void Crystal::AnchorParticle ( const int i, const mat4 &pTransform ) {
