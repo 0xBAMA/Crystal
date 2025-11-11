@@ -403,8 +403,8 @@ public:
     HashMap< ivec3, shared_ptr< GridCell > > anchoredParticles; // concurrent hashmap of grid cell management pointers
 
     // tracking sim parameters
-    ivec3 minExtents = ivec3( 0 );
-    ivec3 maxExtents = ivec3( 0 );
+    ivec3 minExtents = ivec3( 1000 );
+    ivec3 maxExtents = ivec3( -1000 );
 
     // sim support functions
     void AnchorParticle ( int i, const mat4 &pTransform );
