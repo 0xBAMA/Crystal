@@ -206,6 +206,55 @@ inline thread_local rngN normalRNG( 0.0f, 0.1f );
 #include "hashMap/inc/HashMap.h"
 using CTSL::HashMap;
 //=================================================================================================
+// YAML lib
+#include "yaml-cpp-0.8.0/include/yaml-cpp/yaml.h"
+namespace YAML {
+    // encode/decode for vector types (add more as we go)
+    template<>
+    struct convert<vec3> {
+        static Node encode( const vec3& rhs ) {
+            Node node;
+            node.push_back( rhs.x );
+            node.push_back( rhs.y );
+            node.push_back( rhs.z );
+            return node;
+        }
+
+        static bool decode( const Node& node, vec3& rhs ) {
+            if ( !node.IsSequence() || node.size() != 3 ) {
+                return false;
+            }
+
+            rhs.x = node[ 0 ].as<float>();
+            rhs.y = node[ 1 ].as<float>();
+            rhs.z = node[ 2 ].as<float>();
+            return true;
+        }
+    };
+    template<>
+    struct convert<ivec3> {
+        static Node encode( const ivec3& rhs ) {
+            Node node;
+            node.push_back( rhs.x );
+            node.push_back( rhs.y );
+            node.push_back( rhs.z );
+            return node;
+        }
+
+        static bool decode( const Node& node, ivec3& rhs ) {
+            if ( !node.IsSequence() || node.size() != 3 ) {
+                return false;
+            }
+
+            rhs.x = node[ 0 ].as<int>();
+            rhs.y = node[ 1 ].as<int>();
+            rhs.z = node[ 2 ].as<int>();
+            return true;
+        }
+    };
+}
+
+//=================================================================================================
 #include "gif.h" // gif output lib - https://github.com/charlietangora/gif-h
 /* Basic Usage:
 #include <vector>
