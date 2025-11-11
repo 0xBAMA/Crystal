@@ -376,6 +376,11 @@ public:
     // managed logger, allowing for worker threads to submit timestamped messages
     // todo
 
+    // some placeholder stuff, hooks for controls
+    void Screenshot();
+    void Save();
+    void Quit();
+
     // threads managed by constructor/destructor
     thread monitorThread;
     thread workerThreads[ NUM_THREADS ];
@@ -638,6 +643,15 @@ inline void Crystal::StampChar ( const uint8_t &c, ivec2 location, const ivec2 s
 //=================================================================================================
 inline void Crystal::SaveCurrentImage ( const string &filename ) const {
     stbi_write_png( filename.c_str(), imageWidth, imageHeight, 4, &imageBuffer[ 0 ], 4 * imageWidth );
+}
+void Screenshot () {
+    // spawn a thread? tbd
+}
+void Quit () {
+    // need to set threadkill? not sure what else... this maybe should just operate on the vector
+}
+void Save () {
+    // save out the model
 }
 //=================================================================================================
 // particle support functions
