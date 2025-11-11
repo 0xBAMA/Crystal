@@ -544,13 +544,15 @@ inline void Crystal::DrawPixel ( const uint32_t x, const uint32_t y ) {
             // shadow ray trace
         
     } // else you are in the black bars area
-        // I want to do the labels single threaded, not much sense doing it outside
+        // I want to do the labels single threaded, not much sense making it
+        // more complicated trying to evaluate a list of glyphs here, it is
+        // basically
 
     // write the color to the image
     const uint32_t baseIdx = 4 * ( x + imageWidth * y );
-    imageBuffer[ baseIdx + 0 ] = color.r;
-    imageBuffer[ baseIdx + 1 ] = color.g;
-    imageBuffer[ baseIdx + 2 ] = color.b;
+    imageBuffer[ baseIdx + 0 ] = std::clamp( 255.0f * color.r, 0.0f, 255.0f );
+    imageBuffer[ baseIdx + 1 ] = std::clamp( 255.0f * color.g, 0.0f, 255.0f );
+    imageBuffer[ baseIdx + 2 ] = std::clamp( 255.0f * color.b, 0.0f, 255.0f );
     imageBuffer[ baseIdx + 3 ] = 255;
 }
 //=================================================================================================
