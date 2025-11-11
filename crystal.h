@@ -420,16 +420,54 @@ public:
     // worker thread function
     void WorkerThreadFunction ( int id );
     
-    Crystal () { // should take a YAML config or default to a randomly generated one
-
+    Crystal ( const string &yamlPath = "RANDOM" ) {
     // SIM INIT
         // fill out the config struct based on the YAML, or generate random + YAML
+            // constructor should take a YAML config or default to a randomly generated one
+        if ( yamlPath == "RANDOM" ) {
+            GenerateRandomConfig();
+        } else {
+            LoadSpecifiedConfig( yamlPath );
+        }
 
-        // respawn all the particles in the pool
+        { // memory allocations
+            particleScratch.resize( simConfig.numParticlesScratch );
+            particleStorage.resize( simConfig.numParticlesStorage );
+            particleStorageAllocator = 0;
+        }
 
-        // add initial seed particles to the hashmap
+        { // create the importance sampling structure around spawning particles on faces/in the volume
+            float sum = 0.0f;
+            for ( const auto& s : simConfig.spawnProbabilities ) {
+                sum += s;
+            }
 
-        // create the importance sampling structure around 
+            for ( auto& v : simConfig.importanceStructure ) {
+                // constructing a set of integer indices for the faces and uniform volume spawn to
+                    // uniformly pick at runtime to preferentially select based on probabilities
+                const float value = uniformRNG();
+                float sum2 = 0.0f;
+                for ( int i = 0; i < 7; i++ ) {
+                    sum2 += simConfig.spawnProbabilities[ i ] / sum;
+                    if ( value < sum2 ) {
+                        v = i; // this index is selected by the threshold check
+                        break;
+                    }
+                }
+            }
+        }
+
+        { // respawn all the particles in the pool
+            for ( int i = 0; i < simConfig.numParticlesScratch; i++ ) {
+                RespawnParticle( i );
+            }
+        }
+
+        { // add initial seed particles to the hashmap
+            for ( int i = 0; i < simConfig.numInitialSeedParticles; i++ ) {
+
+            }
+        }
 
     // SPAWNING THREADS
         // a monitor thread which maintains a set of data for the master to access
