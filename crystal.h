@@ -397,9 +397,9 @@ public:
     void StampChar ( const uint8_t &c, ivec2 location, ivec2 scale ); // called by StampString
 
     // global sim resources (particle + pointer pools, ivec3->gridCell hashmap)    
-    vector< vec4 > particleScratch{ NUM_PARTICLES };            // state for floating particles (diffusion limit mechanism)
-    vector< shared_ptr< mat4 > > particlePool{ maxParticles };  // preallocated memory buffer for particles, allows playback
-    atomic_uintmax_t particlePoolAllocator { 0u };              // bump allocator for above, enforces order
+    vector< vec4 > particleScratch;                             // state for floating particles (diffusion limit mechanism)
+    vector< shared_ptr< mat4 > > particleStorage;               // preallocated memory buffer for particles, allows playback
+    atomic_uintmax_t particleStorageAllocator;                  // bump allocator for above, enforces order
     HashMap< ivec3, shared_ptr< GridCell > > anchoredParticles; // concurrent hashmap of grid cell management pointers
 
     // tracking sim parameters
