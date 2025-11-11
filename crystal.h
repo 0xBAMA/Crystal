@@ -432,6 +432,7 @@ public:
 
     // monitor thread function
     void MonitorThreadFunction ();
+    atomic< float > percentageCompletion = 0.0f;
 
     // worker thread function
     void WorkerThreadFunction ( int id );
@@ -703,7 +704,7 @@ inline void Crystal::GenerateRandomConfig () {
     out << YAML::Key << "numParticlesScratch";
     out << YAML::Value << simConfig.numParticlesScratch;
 
-    simConfig.numParticlesStorage = 2'000'000;
+    simConfig.numParticlesStorage = 200'000;
     out << YAML::Key << "numParticlesStorage";
     out << YAML::Value << simConfig.numParticlesStorage;
 
@@ -881,7 +882,7 @@ inline void Crystal::UpdateParticle ( const int i ) {
 // this is the master thread over the worker threads on the crystal object
 inline void Crystal::MonitorThreadFunction () {
     // enter a loop
-    // while ( true ) {
+    while ( true ) {
         // how do we quit? something indicated from the master
             // we will need a number of atomic signals... screenshot(atomic) + config, quit(atomic),
             // reset(atomic)
@@ -895,14 +896,19 @@ inline void Crystal::MonitorThreadFunction () {
                 // over to the worker threads to do the work
             // some kind of percentage completion, so that we can report that at the higher level
 
+
+    // report percentage of the storage pool used, unless a screenshot is running... then, report pixels complete
+        // percentageCompletion = float( particleStorageAllocator ) / float( simConfig.numParticlesStorage );
+        // percentageCompletion += 0.01f;
+
         // wait for the next iteration
-        sleep_for( 10s );
-        ssDispatch.store( 0 );
-        while ( ssDispatch < numPixels ) {
-            sleep_for( 1s );
-        }
+        sleep_for( 100ms );
+        // ssDispatch.store( 0 );
+        // while ( ssDispatch < numPixels ) {
+            // sleep_for( 1s );
+        // }
         
-    // }
+    }
     // when we drop out, indicate termination to the other threads
     threadKill = true;
 }
