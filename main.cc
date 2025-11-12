@@ -1,9 +1,15 @@
 #include "crystal.h"
 
 // master kill for all threads
-atomc< bool > threadKill = false;
+atomic< bool > threadKill = false;
 
-int main ( int argc, char* argv ) {
+int main ( int argc, char** argv ) {
+
+    cout << "Hello World" << endl;
+
+    Crystal c;
+
+    cout << "Goodbye World" << endl;
 
     // Proc Updater Thread
         // make sure the proc header has "previous" data
