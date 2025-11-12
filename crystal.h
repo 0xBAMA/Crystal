@@ -35,6 +35,7 @@ using std::chrono::high_resolution_clock;
 //=================================================================================================
 // mutex / lock stuff
 #include <mutex>
+#include <shared_mutex>
 using std::mutex;
 using std::shared_mutex;
 using std::lock_guard;
@@ -51,6 +52,7 @@ using std::max;
 #include <atomic>
 using std::uintmax_t;
 using std::atomic_uintmax_t;
+using std::atomic;
 //=================================================================================================
 // thread stuff
 #include <thread>
@@ -82,6 +84,7 @@ using glm::ivec2;
 using glm::pi;
 using glm::ivec3;
 using glm::dot;
+using glm::clamp;
 
 // constants for shortening calculations of points + vector offsets
 constexpr vec4 p0 = vec4( 0.0f, 0.0f, 0.0f, 1.0f );
@@ -139,52 +142,52 @@ float remap ( float in, float aL, float aH, float bL, float bH ) {
 //=================================================================================================
 // some color ramp functions from https://www.shadertoy.com/view/Nd3fR2
 vec3 turbo(float t) {
-    t = clamp(t, 0.0, 1.0);
-    return clamp(vec3((0.192919+t*(1.618437+t*(-39.426098+t*(737.420549+t*(-6489.216487+t*(28921.755478+t*(-72384.553891+t*(107076.097978+t*(-93276.212113+t*(44337.286143+t*-8884.508085)))))))))),
-                      (0.101988+t*(1.859131+t*(7.108520+t*(-20.179546+t*11.147684)))),
-                      (0.253316+t*(4.858570+t*(55.191710+t*(-803.379980+t*(4477.461997+t*(-14496.039745+t*(28438.311669+t*(-32796.884355+t*(20328.068712+t*-5210.826342)))))))))), 0.0, 1.0);
+    t = std::clamp(t, 0.0f, 1.0f);
+    return clamp(vec3((0.192919f+t*(1.618437f+t*(-39.426098f+t*(737.420549f+t*(-6489.216487f+t*(28921.755478f+t*(-72384.553891f+t*(107076.097978f+t*(-93276.212113f+t*(44337.286143f+t*-8884.508085f)))))))))),
+                      (0.101988f+t*(1.859131f+t*(7.108520f+t*(-20.179546f+t*11.147684f)))),
+                      (0.253316f+t*(4.858570f+t*(55.191710f+t*(-803.379980f+t*(4477.461997f+t*(-14496.039745f+t*(28438.311669f+t*(-32796.884355f+t*(20328.068712f+t*-5210.826342f)))))))))), 0.0f, 1.0f);
 }
 
 vec3 bone(float t) {
-    t = clamp(t, 0.0, 1.0);
-    return clamp(vec3((-0.011603+t*(1.066867+t*(-0.673604+t*0.623930))),
-                      (0.018446+t*(0.524946+t*(1.185768+t*-0.732596))),
-                      (0.004421+t*(1.254048+t*-0.275214))), 0.0, 1.0);
+    t = std::clamp(t, 0.0f, 1.0f);
+    return clamp(vec3((-0.011603f+t*(1.066867f+t*(-0.673604f+t*0.623930f))),
+                      (0.018446f+t*(0.524946f+t*(1.185768f+t*-0.732596f))),
+                      (0.004421f+t*(1.254048f+t*-0.275214f))), 0.0f, 1.0f);
 }
 
 vec3 afmhot(float t) {
-    t = clamp(t, 0.0, 1.0);
-    return clamp(vec3((-0.000000+t*2.000000),
-                      (-0.500000+t*2.000000),
-                      (-1.000000+t*2.000000)), 0.0, 1.0);
+    t = std::clamp(t, 0.0f, 1.0f);
+    return clamp(vec3((-0.000000f+t*2.000000f),
+                      (-0.500000f+t*2.000000f),
+                      (-1.000000f+t*2.000000f)), 0.0f, 1.0f);
 }
 
 vec3 gist_heat(float t) {
-    t = clamp(t, 0.0, 1.0);
-    return clamp(vec3((0.000000+t*1.500000),
-                      (-1.000000+t*2.000000),
-                      (-3.000000+t*4.000000)), 0.0, 1.0);
+    t = std::clamp(t, 0.0f, 1.0f);
+    return clamp(vec3((0.000000f+t*1.500000f),
+                      (-1.000000f+t*2.000000f),
+                      (-3.000000f+t*4.000000f)), 0.0f, 1.0f);
 }
 
 vec3 plasma(float t) {
-    t = clamp(t, 0.0, 1.0);
-    return clamp(vec3((0.057526+t*(2.058166+t*-1.141244)),
-                      (-0.183275+t*(0.668964+t*0.479353)),
-                      (0.525210+t*(1.351117+t*(-4.013494+t*2.284066)))), 0.0, 1.0);
+    t = std::clamp(t, 0.0f, 1.0f);
+    return clamp(vec3((0.057526f+t*(2.058166f+t*-1.141244f)),
+                      (-0.183275f+t*(0.668964f+t*0.479353f)),
+                      (0.525210f+t*(1.351117f+t*(-4.013494f+t*2.284066f)))), 0.0f, 1.0f);
 }
 
 vec3 inferno(float t) {
-    t = clamp(t, 0.0, 1.0);
-    return clamp(vec3((-0.015449+t*(0.816640+t*(3.399179+t*(-4.796465+t*1.530683)))),
-                      (0.000619+t*(0.450682+t*(-1.556978+t*(3.904984+t*-1.764423)))),
-                      (0.019123+t*(0.792737+t*(29.365333+t*(-210.608893+t*(622.120191+t*(-942.393021+t*(711.115854+t*-209.780428)))))))), 0.0, 1.0);
+    t = std::clamp(t, 0.0f, 1.0f);
+    return clamp(vec3((-0.015449f+t*(0.816640f+t*(3.399179f+t*(-4.796465f+t*1.530683f)))),
+                      (0.000619f+t*(0.450682f+t*(-1.556978f+t*(3.904984f+t*-1.764423f)))),
+                      (0.019123f+t*(0.792737f+t*(29.365333f+t*(-210.608893f+t*(622.120191f+t*(-942.393021f+t*(711.115854f+t*-209.780428f)))))))), 0.0f, 1.0f);
 }
 
 vec3 magma(float t) {
-    t = clamp(t, 0.0, 1.0);
-    return clamp(vec3((-0.023114+t*(0.883412+t*(2.280390+t*-2.164009))),
-                      (-0.000931+t*(0.700294+t*(-3.639731+t*(14.399222+t*(-28.183967+t*(29.245012+t*-11.549071)))))),
-                      (0.011971+t*(1.223232+t*(17.782054+t*(-111.294284+t*(282.340184+t*(-384.394777+t*(275.310307+t*-80.251736)))))))), 0.0, 1.0);
+    t = std::clamp(t, 0.0f, 1.0f);
+    return clamp(vec3((-0.023114f+t*(0.883412f+t*(2.280390f+t*-2.164009f))),
+                      (-0.000931f+t*(0.700294f+t*(-3.639731f+t*(14.399222f+t*(-28.183967f+t*(29.245012f+t*-11.549071f)))))),
+                      (0.011971f+t*(1.223232f+t*(17.782054f+t*(-111.294284f+t*(282.340184f+t*(-384.394777f+t*(275.310307f+t*-80.251736f)))))))), 0.0f, 1.0f);
 }
 //=================================================================================================
 // random number generation utilities
@@ -226,7 +229,8 @@ struct CrystalSimConfig {
 
     // todo
 
-    // also render config like colors? I want to move that onto the particles, soon
+    // chance to bond
+    // what else?
 
 };
 
@@ -241,7 +245,7 @@ struct CrystalRenderConfig {
             // show number of steps into the volume - heatmaps
             // show glyph bounds
         // include labels or not
-}
+};
 //=================================================================================================
 // global constants
 constexpr int gifDelay = 4;
@@ -255,12 +259,11 @@ constexpr uintmax_t maxParticles = 35'000'000 + pad;// size of pool of prealloca
 constexpr int GridCellMaxParticles = 128;           // this size might make sense to play with eventually
 //=================================================================================================
 struct GridCell {
+// I want to eventually have each particle keep color, too... large pool + randomized colors would be very cool
     vector< shared_ptr< mat4 > > particles;         // backing storage
     shared_mutex mutex;                             // access mutex - shared_lock for read, unique_lock for write
 
-    gridCell () { particles.reserve( GridCellMaxParticles ); }
-    size_t GetCount ();
-    void Add( const mat4 );
+    GridCell () { particles.reserve( GridCellMaxParticles ); }
 
     // size_t GetCount () {
         // this is the non-exclusive read mutex
@@ -272,6 +275,9 @@ struct GridCell {
         // lock the exclusive mutex for writing
         // std::unique_lock lock( mutex );
         // if ( particles.size() < GridCellMaxParticles ) {
+
+        // * problem here - we need to change to the Crystal object layer to manage this pointer dispatch without adding a bunch of pointers
+
             // get a new pointer...
             // uintmax_t ptrIdx = getPointerIndex();
 
@@ -308,7 +314,7 @@ public:
 
     // job counter + screenshot trigger
     atomic_uintmax_t jobDispatch = 0;
-    atomic_uintmax_t ssDispatch = imageWidth * imageHeight + 1; // prime it so that it will not indicate a screenshot at init
+    atomic_uintmax_t ssDispatch = numPixels + 1;                // prime it so that it will not indicate a screenshot at init
 
     // scratch buffer to render an image
     uint8_t imageBuffer[ numPixels * 4 ];
@@ -330,7 +336,7 @@ public:
     vector< vec4 > particleScratch { NUM_PARTICLES };           // state for floating particles (diffusion limit mechanism) 
     vector< shared_ptr< mat4 > > particlePool { maxParticles }; // preallocated memory buffer for particles, allows playback
     atomic_uintmax_t particlePoolAllocator { 0u };              // bump allocator for above, enforces order
-    HashMap< ivec3, shared_ptr< gridCell > > anchoredParticles; // concurrent hashmap of grid cell management pointers
+    HashMap< ivec3, shared_ptr< GridCell > > anchoredParticles; // concurrent hashmap of grid cell management pointers
 
     // sim support functions
     void AnchorParticle ();
@@ -381,8 +387,8 @@ public:
 //=================================================================================================
 // screenshot utilities
 //=================================================================================================
-void Crystal::clearImage () {
-    shared_lock( imageMutex );
+void Crystal::ClearImage () {
+    shared_lock lock( imageMutex );
     for ( auto& c : imageBuffer ) {
         c = 0;
     }
@@ -393,13 +399,12 @@ void Crystal::DrawPixel ( const uint32_t x, const uint32_t y ) {
     constexpr float ratio = ( 21.0f / 9.0f );
     const vec2 uv = vec2( x + 0.5f, y + 0.5f ) / vec2( imageWidth, imageHeight );
 
-    vec3 color = vec3( 0.0f );
-    shared_lock( imageMutex );
-
-    // width ( x ) is from 0 to 1... height ( y ) is based on the 21:9/~2.35:1 ratio
+    // width ( x ) is from 0 to 1... height ( y ) is based on the 21:9/~2.35:1 "cinematic" ratio
     const vec2 lowThresh = vec2( 0, 0.5f / ratio );
     const vec2 highThresh = vec2( 1, 1.0f - 0.5f / ratio );
 
+    vec3 color = vec3( 0.0f );
+    shared_lock lock( imageMutex );
     if ( glm::all( glm::lessThan( uv, highThresh ) ) &&
         glm::all( glm::greaterThan( uv, lowThresh ) ) ) {
         // we are in the area where we need to do additional work to render
@@ -412,14 +417,15 @@ void Crystal::DrawPixel ( const uint32_t x, const uint32_t y ) {
 
             // shadow ray trace
         
-    } else {
-        // we can do string evaluation here, directly from the config struct...
-            // this is actually a nice place to do it, because it will give the jobs that do work on
-            // the black bars will have some work to do, evaluating against the list of characters
+    } // else you are in the black bars area
+        // I want to do the labels single threaded, not much sense doing it outside
 
-        // we should setup a list of glyphs and other features, and test against them in an efficient
-            // way, here, to see if we need to draw... debug flag only evaluates glyph bounds 
-    }
+    // write the color to the image
+    const uint32_t baseIdx = 4 * ( x + imageWidth * y );
+    imageBuffer[ baseIdx + 0 ] = color.r;
+    imageBuffer[ baseIdx + 1 ] = color.g;
+    imageBuffer[ baseIdx + 2 ] = color.b;
+    imageBuffer[ baseIdx + 3 ] = 255;
 }
 //=================================================================================================
 // particle support functions
