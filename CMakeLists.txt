@@ -12,13 +12,13 @@ set( CMAKE_REQUIRED_FLAGS -lstdc++fs )
 # build type set to debug
 set( CMAKE_BUILD_TYPE Debug )
 
-set (CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/bin")
+set ( CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/bin" )
 
-find_package(ftxui REQUIRED)
-add_executable(main main.cpp)
+find_package( ftxui REQUIRED )
+add_executable( main main.cc )
 add_library( STB_ImageUtilsWrapper STATIC stb/impl.cc )
 
-target_link_libraries(main
+target_link_libraries( main
   PUBLIC STB_ImageUtilsWrapper
   PRIVATE ftxui::screen
   PRIVATE ftxui::dom
