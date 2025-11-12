@@ -1,6 +1,7 @@
 //=================================================================================================
-// command line output
+// basic IO
 #include <string>
+#include <fstream>
 #include <iostream>
 #include <sstream>
 using std::cout;
@@ -8,11 +9,22 @@ using std::endl;
 using std::string;
 using std::to_string;
 //=================================================================================================
+// Terminal UI output
+#include <ftxui/dom/elements.hpp>
+#include <ftxui/screen/screen.hpp>
+#include <ftxui/screen/color.hpp>
+
+#include <ftxui/component/loop.hpp>
+#include <ftxui/component/captured_mouse.hpp>       // for ftxui
+#include <ftxui/component/component.hpp>            // for Checkbox, Renderer, Vertical
+#include <ftxui/component/component_base.hpp>       // for ComponentBase
+#include <ftxui/component/screen_interactive.hpp>   // for ScreenInteractive
+using namespace ftxui;
+//=================================================================================================
 // basic containers
 #include <vector>
 using std::vector;
 //=================================================================================================
-#include <fstream>
 //=================================================================================================
 #include <unordered_map>
 using std::unordered_map;
@@ -58,18 +70,6 @@ std::thread threads[ NUM_THREADS ];
 #include <memory>
 using std::make_shared;
 using std::shared_ptr;
-//=================================================================================================
-// Terminal UI output
-#include <ftxui/dom/elements.hpp>
-#include <ftxui/screen/screen.hpp>
-#include <ftxui/screen/color.hpp>
-
-#include <ftxui/component/loop.hpp>
-#include <ftxui/component/captured_mouse.hpp>  // for ftxui
-#include <ftxui/component/component.hpp>  // for Checkbox, Renderer, Vertical
-#include <ftxui/component/component_base.hpp>      // for ComponentBase
-#include <ftxui/component/screen_interactive.hpp>  // for ScreenInteractive
-using namespace ftxui;
 //=================================================================================================
 // math/vector stuff
 #define GLM_FORCE_SWIZZLE
@@ -640,16 +640,16 @@ void prepareOutputFrameDeltaTracking ( bool rebuildMap, vector< uint8_t > &data,
                             // origin, direction
                         vec2 uvAdjust = ( uv - vec2( 0.5f, 0.5f ) ) * vec2( 1.0f, float( imageHeight ) / float( imageWidth ) );
                         mat4 inverseTransform = glm::inverse( transform );
-                        vec3 rO = inverseTransform * vec4( vec3( 200.0f * uvAdjust, -40 ), 1.0f );
-                        vec3 rD = inverseTransform * vec4( 0.0f, 0.0f, 1.0f, 0.0f );
+                        vec3 rO = vec4( vec3( std::max( 200.0f, float( std::max( maxExtents.x - minExtents.x, std::max( maxExtents.y - minExtents.y, maxExtents.z - minExtents.z ) ) ) ) * uvAdjust, -200 ), 1.0f );
+                        vec3 rD = vec4( 0.0f, 0.0f, 1.0f, 0.0f );
 
                         // track the ray from the eye through the volume...
-                        int maxDistance = std::ceil( glm::distance( minExtentsIn, maxExtentsIn ) );
+                        int maxDistance = int( std::ceil( glm::distance( vec3( minExtentsIn ), vec3( maxExtentsIn ) ) ) );
                         float tMin, tMax;
                         if ( IntersectAABB( rO, rD, minExtentsIn, maxExtentsIn, tMin, tMax ) ) {
                             // color = vec3( 1.0f, 0.0f, 0.0f );
-                            // vec3 p = rO + max( 0.0f, tMin ) * rD;
-                            vec3 p = rO + tMin * rD;
+                            vec3 p = rO + max( 0.0f, tMin ) * rD;
+                            // vec3 p = rO + tMin * rD;
                             constexpr int samples = 128;
                             for ( int s = 0; s < samples; s++ ) {
                                 for ( int i = 0; i < maxDistance; i++ ) {
@@ -712,6 +712,12 @@ void prepareOutputFrameDeltaTracking ( bool rebuildMap, vector< uint8_t > &data,
 }
 
 void prepareOutputScreenshotDeltaTracking () {
+    // int frame = 100;
+    // vec3 sunDirection = glm::rotate( identity, frame * 0.01f, glm::normalize( vec3( 1.0f, 2.0f, 4.0f ) ) ) * v0;
+    // prepareOutputFrameDeltaTracking( true, screenshotBufferData, int( pointerPoolAllocator ),
+        // minExtents - 10, maxExtents + 10, glm::scale( glm::rotate( identity, frame * 0.003f, glm::normalize( vec3( 0.7f, 1.0f, 0.8f ) ) ),
+            // vec3( 1.0f / float( std::min( maxExtents.x - minExtents.x, std::min( maxExtents.y - minExtents.y, maxExtents.z - minExtents.z ) ) ) ) ), sunDirection );
+    
     prepareOutputFrameDeltaTracking( true, screenshotBufferData, pointerPoolAllocator, minExtents, maxExtents, glm::rotate( identity, 0.5f, glm::normalize( vec3( 0.7f, 1.0f, 0.8f ) ) ), normalize( vec3( 1.0f ) ) );
 
     auto now = std::chrono::system_clock::now();
@@ -879,7 +885,8 @@ int main () {
                 }
 
                 if ( event == Event::Character('w') ) {
-                    prepareOutputScreenshot();
+                    // prepareOutputScreenshot();
+                    prepareOutputScreenshotDeltaTracking();
                     return true;
                 }
 
@@ -1034,24 +1041,32 @@ int main () {
     dataVec.resize( imageWidth * imageHeight * 4 );
     const uintmax_t ptrAllocateCache = pointerPoolAllocator;
     int frame = frames;
-    for ( int i = frames; i < frames + 400; i++ ) {
+    int additionalFrames = 0;
+    for ( int i = frames; i < frames + additionalFrames; i++ ) {
         pointerPoolAllocator = std::min( uintmax_t( ptrAllocateCache ), uintmax_t( i * particlesPerStep ) );
         int f = std::min( frame, int( frames ) );
         vec3 sunDirection = glm::rotate( identity, frame * 0.01f, vec3( 1.0f, 2.0f, 4.0f ) ) * v0;
         prepareOutputFrameDeltaTracking( ( i <= frames ), dataVec, particlesPerStep * frame,
             glm::mix( minExtentsData[ f ], minExtentsData[ f + 1 ], 0.5f ),
             glm::mix( maxExtentsData[ f], maxExtentsData[ f + 1 ], 0.5f ),
-            glm::scale( glm::rotate( identity, frame * 0.003f, glm::normalize( vec3( 0.7f, 1.0f, 0.8f ) ) ),
-                vec3( ( 2.0f / distance( glm::mix( minExtentsData[ f ], minExtentsData[ f + 1 ], 0.5f ), glm::mix( maxExtentsData[ f], maxExtentsData[ f + 1 ], 0.5f ) ) ) *
-                glm::mix( 1.1f, 0.9f, glm::smoothstep( float( frame ) / float( frames ), 0.0f, 1.0f ) ) ) ), sunDirection );
+            glm::scale( glm::rotate( identity, frame * 0.003f, glm::normalize( vec3( 0.7f, 1.0f, 0.8f ) ) ), vec3( glm::mix( 1.1f, 0.9f, glm::smoothstep( float( frame ) / float( frames ), 0.0f, 1.0f ) ) ) ),
+            sunDirection );
+            // glm::scale( glm::rotate( identity, frame * 0.003f, glm::normalize( vec3( 0.7f, 1.0f, 0.8f ) ) ),
+                // vec3( ( 2.0f / distance( glm::mix( minExtentsData[ f ], minExtentsData[ f + 1 ], 0.5f ), glm::mix( maxExtentsData[ f], maxExtentsData[ f + 1 ], 0.5f ) ) ) *
+                // glm::mix( 1.1f, 0.9f, glm::smoothstep( float( frame ) / float( frames ), 0.0f, 1.0f ) ) ) ), sunDirection );
 
         GifWriteFrame( &g, dataVec.data(), imageWidth, imageHeight, gifDelay );
-        cout << "finished frame " << frame << " / " << frames + 400 << endl;
+        cout << "finished frame " << frame << " / " << frames + additionalFrames << endl;
         frame++;
     }
 	cout << "Prepping GIF file" << ssA.str() << "..." << std::flush;
     GifEnd( &g );
     cout << endl << "Done." << endl;
+
+    // int x, y, n = 1; // forcing n = 1 should give 1 channel data out 
+    // uint8_t *fontLUT = stbi_load( "fatFont.png", &x, &y, &n, 1 );
+    // cout << "loaded " << x << " " << y << " " << n << endl;
+    // stbi_write_png( "test.png", x, y, 1, fontLUT, x );
 
     // example "lossless" conversion from gif to mp4
     // ffmpeg -i in.gif -c:v libx264 -preset veryslow -qp 0 output.mp4
