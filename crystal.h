@@ -271,25 +271,6 @@ struct GridCell {
         // return particles.size();
     // }
 
-    // void Add( const mat4 &pTransform ) {
-        // lock the exclusive mutex for writing
-        // std::unique_lock lock( mutex );
-        // if ( particles.size() < GridCellMaxParticles ) {
-
-        // * problem here - we need to change to the Crystal object layer to manage this pointer dispatch without adding a bunch of pointers
-
-            // get a new pointer...
-            // uintmax_t ptrIdx = getPointerIndex();
-
-            // using the input argument, fill out the data
-            // shared_ptr< mat4 > ptr = pointerPool[ ptrIdx ];
-            // *ptr = pTransform;
-
-            // pushing the pointer onto the list
-            // particles.push_back( ptr );
-        // }
-    // }
-
     // shared_ptr< mat4 > Get( const int &idx ) {
         // locking the non-exclusive read mutex
         // std::shared_lock lock( mutex );
@@ -337,9 +318,9 @@ public:
     void StampChar ( const uint8_t &c, ivec2 location, ivec2 scale ); // called by StampString
 
     // global sim resources (particle + pointer pools, ivec3->gridCell hashmap)    
-    vector< vec4 > particleScratch{ NUM_PARTICLES };          // state for floating particles (diffusion limit mechanism)
-    vector< shared_ptr< mat4 > > particlePool{ maxParticles }; // preallocated memory buffer for particles, allows playback
-    atomic_uintmax_t particlePoolAllocator { 0u };            // bump allocator for above, enforces order
+    vector< vec4 > particleScratch{ NUM_PARTICLES };            // state for floating particles (diffusion limit mechanism)
+    vector< shared_ptr< mat4 > > particlePool{ maxParticles };  // preallocated memory buffer for particles, allows playback
+    atomic_uintmax_t particlePoolAllocator { 0u };              // bump allocator for above, enforces order
     HashMap< ivec3, shared_ptr< GridCell > > anchoredParticles; // concurrent hashmap of grid cell management pointers
 
     // tracking sim parameters
@@ -351,6 +332,10 @@ public:
     void RespawnParticle ( int i );
     void UpdateParticle ( int i );
 
+    // RNG objects for uniform and normal distributions
+    thread_local rng uniformRNG( 0.0f, 1.0f );
+    thread_local rngN normalRNG( 0.0f, 0.1f );
+
     // simulation config
     CrystalSimConfig simConfig;
 
@@ -361,7 +346,15 @@ public:
     void WorkerThreadFunction ( int id );
     
     Crystal () { // should take a YAML config or default to a randomly generated one
+
+    // SIM INIT
         // fill out the config struct based on the YAML, or generate random + YAML
+
+        // respawn all the particles in the pool
+
+        // add initial seed particles to the hashmap
+
+        // create the importance sampling structure around 
 
     // SPAWNING THREADS
         // a monitor thread which maintains a set of data for the master to access
@@ -530,7 +523,7 @@ inline void Crystal::AnchorParticle ( const int i, const mat4 &pTransform ) {
 //=================================================================================================
 // respawn the particle
 inline void Crystal::RespawnParticle ( const int i ) {
-    // this has to depend on some sim parameters
+    // simple importance sampling scheme
 
 }
 //=================================================================================================
