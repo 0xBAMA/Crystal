@@ -30,32 +30,34 @@ int main ( int argc, char** argv ) {
         int iterations = 0;
 		auto tStart = high_resolution_clock::now();
 			
-        // while ( true )
+        while ( true )
+            auto document = ( [&] () {
+                    Elements temp, accum;
+                    for ( int j = 0; j < 6; j++ ) {
+                        for ( int i = 0; i < 12; i++ ) {
+                            int idx = i + 6 * j;
+                            float intensity = usagePercentage[ idx ];
+                            temp.push_back( text( " " ) | bgcolor( Color::RGB( 255 * sqrt( intensity ), 128 * intensity, 0 ) ) );
+                        }
+                        accum.push_back( hbox( temp ) );
+                        temp.resize( 0 );
+                    }
+                    return vbox( accum );
+                } ) () | borderHeavy;
+
+            // wip need to figure out hwo to create an unwindowed interactive thing
+            auto screen = Screen::Create( Dimension::Fit( document ), Dimension::Fit( document ) );
+            Render( screen, document );
+            screen.Print();
+
             // do the terminal UI shit
                 // CPU activity
                 // display table of Crystal activity
 
-            // sleep_for( 100ms );
+            sleep_for( 100ms );
             // cout << "Running Monitor Thread " << std::chrono::duration_cast< std::chrono::milliseconds >( high_resolution_clock::now() - tStart )  << "ms" << endl;
-        // }
+        }
 
-        auto document = [] () {
-                Elements temp, accum;
-                for ( int j = 0; j < 6; j++ ) {
-                    for ( int i = 0; i < 12; i++ ) {
-                        int idx = i + 6 * j;
-                        float intensity = usagePercentage[ idx ];
-                        temp.push_back( text( " " ) | bgcolor( Color::RGB( 255 * sqrt( intensity ), 128 * intensity, 0 ) ) );
-                    }
-                    accum.push_back( hbox( temp ) );
-                    temp.resize( 0 );
-                }
-                return vbox( accum );
-            } () | borderHeavy;
-
-        auto screen = Screen::Create( Dimension::Fit( document ), Dimension::Fit( document ) );
-        Render( screen, document );
-        screen.Print();
 
         threadKill = true;
     });            
