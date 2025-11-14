@@ -30,7 +30,7 @@ int main ( int argc, char** argv ) {
         int iterations = 0;
 		auto tStart = high_resolution_clock::now();
 			
-        while ( true ) {
+        // while ( true ) {
             auto document = std::function( [&] () {
                 Elements temp, accum;
                 for ( int j = 0; j < 6; j++ ) {
@@ -55,8 +55,8 @@ int main ( int argc, char** argv ) {
                 // CPU activity
                 // display table of Crystal activity
 
-            sleep_for( 100ms );
-        }
+            sleep_for( 10s );
+        // }
             
         // cout << "Running Monitor Thread " << std::chrono::duration_cast< std::chrono::milliseconds >( high_resolution_clock::now() - tStart )  << "ms" << endl;
         threadKill = true;

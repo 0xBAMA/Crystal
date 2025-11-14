@@ -148,42 +148,36 @@ vec3 turbo(float t) {
                       (0.101988f+t*(1.859131f+t*(7.108520f+t*(-20.179546f+t*11.147684f)))),
                       (0.253316f+t*(4.858570f+t*(55.191710f+t*(-803.379980f+t*(4477.461997f+t*(-14496.039745f+t*(28438.311669f+t*(-32796.884355f+t*(20328.068712f+t*-5210.826342f)))))))))), 0.0f, 1.0f);
 }
-
 vec3 bone(float t) {
     t = std::clamp(t, 0.0f, 1.0f);
     return clamp(vec3((-0.011603f+t*(1.066867f+t*(-0.673604f+t*0.623930f))),
                       (0.018446f+t*(0.524946f+t*(1.185768f+t*-0.732596f))),
                       (0.004421f+t*(1.254048f+t*-0.275214f))), 0.0f, 1.0f);
 }
-
 vec3 afmhot(float t) {
     t = std::clamp(t, 0.0f, 1.0f);
     return clamp(vec3((-0.000000f+t*2.000000f),
                       (-0.500000f+t*2.000000f),
                       (-1.000000f+t*2.000000f)), 0.0f, 1.0f);
 }
-
 vec3 gist_heat(float t) {
     t = std::clamp(t, 0.0f, 1.0f);
     return clamp(vec3((0.000000f+t*1.500000f),
                       (-1.000000f+t*2.000000f),
                       (-3.000000f+t*4.000000f)), 0.0f, 1.0f);
 }
-
 vec3 plasma(float t) {
     t = std::clamp(t, 0.0f, 1.0f);
     return clamp(vec3((0.057526f+t*(2.058166f+t*-1.141244f)),
                       (-0.183275f+t*(0.668964f+t*0.479353f)),
                       (0.525210f+t*(1.351117f+t*(-4.013494f+t*2.284066f)))), 0.0f, 1.0f);
 }
-
 vec3 inferno(float t) {
     t = std::clamp(t, 0.0f, 1.0f);
     return clamp(vec3((-0.015449f+t*(0.816640f+t*(3.399179f+t*(-4.796465f+t*1.530683f)))),
                       (0.000619f+t*(0.450682f+t*(-1.556978f+t*(3.904984f+t*-1.764423f)))),
                       (0.019123f+t*(0.792737f+t*(29.365333f+t*(-210.608893f+t*(622.120191f+t*(-942.393021f+t*(711.115854f+t*-209.780428f)))))))), 0.0f, 1.0f);
 }
-
 vec3 magma(float t) {
     t = std::clamp(t, 0.0f, 1.0f);
     return clamp(vec3((-0.023114f+t*(0.883412f+t*(2.280390f+t*-2.164009f))),
@@ -254,7 +248,6 @@ namespace YAML {
         }
     };
 }
-
 //=================================================================================================
 #include "gif.h" // gif output lib - https://github.com/charlietangora/gif-h
 /* Basic Usage:
@@ -530,6 +523,11 @@ public:
         // StampString( s, ivec2( 100, 250 ), ivec2( 1, 2 ) );
         // StampString( s, ivec2( 100, 300 ), ivec2( 2, 1 ) );
         // SaveCurrentImage( "test.png" );
+
+        monitorThread = thread( [ & ] () { MonitorThreadFunction(); } );
+        for ( int i = 0; i < NUM_THREADS; i++ ) {
+            workerThreads[ i ] = thread( [ & ] () { WorkerThreadFunction( i ); } );
+        }
     }
 
     ~Crystal () {
@@ -539,7 +537,19 @@ public:
         sleep_for( 69ms );
 
         // join the monitor thread and all the worker threads
+        monitorThread.join();
+        for ( auto& t : workerThreads )
+            t.join();
 
+        // save out the current model, all the bound particles + YAML string
+        auto now = std::chrono::system_clock::now();
+        auto inTime_t = std::chrono::system_clock::to_time_t( now );
+        std::stringstream ssA;
+        ssA << std::put_time( std::localtime( &inTime_t ), "Crystal-Model-%Y-%m-%d at %H-%M-%S.png" );
+
+        // SaveModel( ssA.str().c_str() );
+        SaveCurrentImage( ssA.str().c_str() );
+        
     }
 };
 //=================================================================================================
@@ -575,6 +585,8 @@ inline void Crystal::DrawPixel ( const uint32_t x, const uint32_t y ) {
         // delta track raymarch
 
             // shadow ray trace
+
+        color = vec3( 1.0f );
 
     } // else you are in the black bars area
         // I want to do the labels single threaded, not much sense making it
@@ -631,7 +643,7 @@ inline bool Crystal::ScreenshotIndicated ( uint32_t &x, uint32_t &y ) {
     uintmax_t idx = ssDispatch.fetch_add( 1 );
     x = idx % imageWidth;
     y = idx / imageHeight;
-    return ( idx < numPixels );
+    return ( idx < ( numPixels ) );
 }
 //=================================================================================================
 inline bool Crystal::ParticleUpdateIndicated ( uintmax_t &jobIdx ) {
@@ -799,7 +811,6 @@ inline void Crystal::GenerateRandomConfig () {
     // cout << "Configured:" << endl;
     // cout << out.c_str() << endl;
 }
-
 //=================================================================================================
 //=================================================================================================
 // add the particle to the hashmap
@@ -867,8 +878,7 @@ inline void Crystal::UpdateParticle ( const int i ) {
 // this is the master thread over the worker threads on the crystal object
 inline void Crystal::MonitorThreadFunction () {
     // enter a loop
-    int iterations = 0;
-    while ( true ) {
+    // while ( true ) {
         // how do we quit? something indicated from the master
             // we will need a number of atomic signals... screenshot(atomic) + config, quit(atomic),
             // reset(atomic)
@@ -884,9 +894,12 @@ inline void Crystal::MonitorThreadFunction () {
 
 
         // wait for the next iteration
-        sleep_for( 100ms );
-    }
-    // if we drop out, indicate termination to the other threads
+        sleep_for( 10s );
+        ssDispatch = 0;
+        sleep_for( 10s );
+        
+    // }
+    // when we drop out, indicate termination to the other threads
     threadKill = true;
 }
 //=================================================================================================
@@ -904,19 +917,24 @@ inline void Crystal::WorkerThreadFunction ( int id ) {
         // do we want screenshot work? if so, where?
         uint32_t x, y;
         const bool ss = ScreenshotIndicated( x, y );
+        cout << "doing pixel " << x << " " << y << endl;
+        sleep_for( 0.01ms );
 
         // otherwise let's do particle work
         uintmax_t i;
         const bool work = ParticleUpdateIndicated( i );
 
-        if ( ( !ss && !work ) || pause ) {
+
+        // if ( !ss && !work ) {
             // there is no work to do right now
-            sleep_for( 1ms );
-        } else if ( ss ) {
+            // sleep_for( 1ms );
+        // } else if ( ss ) {
+        if ( ss ) {
             // we have secured work for one pixel
             DrawPixel( x, y );
             ++ssComplete; // helps with reporting "percentage complete"
-        } else if ( work ) {
+        // } else if ( work ) {
+        } else {
             // we need to do work for one particle update, index indicated by the job counter i
             UpdateParticle( static_cast< int >( i % simConfig.numParticlesScratch ) );
         }
