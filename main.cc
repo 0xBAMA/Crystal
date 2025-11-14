@@ -21,8 +21,6 @@ int main ( int argc, char** argv ) {
     });
     cout << "Done." << endl;
 
-    // tbd...
-    Crystal c;
 
     cout << "Spawning Terminal UI Thread... ";
 	std::thread terminalUIThread = std::thread( [&] () {
@@ -51,11 +49,13 @@ int main ( int argc, char** argv ) {
             screen.Print();
             cout << endl;
 
+            Crystal c;
+
             // do the terminal UI shit
                 // CPU activity
                 // display table of Crystal activity
 
-            sleep_for( 10s );
+            sleep_for( 20s );
         // }
             
         // cout << "Running Monitor Thread " << std::chrono::duration_cast< std::chrono::milliseconds >( high_resolution_clock::now() - tStart )  << "ms" << endl;

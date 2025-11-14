@@ -483,10 +483,10 @@ public:
             }
         }
 
-        cout << "adding initial anchored particles" << endl;
+        // cout << "adding initial anchored particles" << endl;
         { // add initial seed particles to the hashmap
             for ( int i = 0; i < simConfig.numInitialSeedParticles; i++ ) {
-                cout << "Adding particle " << i << endl;
+                // cout << "Adding particle " << i << endl;
                 // pick from the specified distribution
                 const vec3 p = glm::mix( vec3( simConfig.InitialSeedSpanMin ),
                     vec3( simConfig.InitialSeedSpanMax ),
@@ -586,12 +586,14 @@ inline void Crystal::DrawPixel ( const uint32_t x, const uint32_t y ) {
 
             // shadow ray trace
 
-        color = vec3( 1.0f );
+        // color = vec3( 1.0f );
+        color = vec3( uniformRNG() );
 
     } // else you are in the black bars area
         // I want to do the labels single threaded, not much sense making it
         // more complicated trying to evaluate a list of glyphs here, it is
         // basically
+
 
     // write the color to the image
     const uint32_t baseIdx = 4 * ( x + imageWidth * y );
@@ -642,7 +644,7 @@ inline bool Crystal::ScreenshotIndicated ( uint32_t &x, uint32_t &y ) {
     // no need to branch, we will do it one level up
     uintmax_t idx = ssDispatch.fetch_add( 1 );
     x = idx % imageWidth;
-    y = idx / imageHeight;
+    y = idx / imageWidth;
     return ( idx < ( numPixels ) );
 }
 //=================================================================================================
@@ -892,11 +894,12 @@ inline void Crystal::MonitorThreadFunction () {
                 // over to the worker threads to do the work
             // some kind of percentage completion, so that we can report that at the higher level
 
-
         // wait for the next iteration
         sleep_for( 10s );
-        ssDispatch = 0;
-        sleep_for( 10s );
+        ssDispatch.store( 0 );
+        while ( ssDispatch < numPixels ) {    
+            sleep_for( 1s );
+        }
         
     // }
     // when we drop out, indicate termination to the other threads
@@ -917,13 +920,10 @@ inline void Crystal::WorkerThreadFunction ( int id ) {
         // do we want screenshot work? if so, where?
         uint32_t x, y;
         const bool ss = ScreenshotIndicated( x, y );
-        cout << "doing pixel " << x << " " << y << endl;
-        sleep_for( 0.01ms );
 
         // otherwise let's do particle work
         uintmax_t i;
         const bool work = ParticleUpdateIndicated( i );
-
 
         // if ( !ss && !work ) {
             // there is no work to do right now
@@ -936,7 +936,7 @@ inline void Crystal::WorkerThreadFunction ( int id ) {
         // } else if ( work ) {
         } else {
             // we need to do work for one particle update, index indicated by the job counter i
-            UpdateParticle( static_cast< int >( i % simConfig.numParticlesScratch ) );
+            UpdateParticle( i % simConfig.numParticlesScratch );
         }
     }
 }
