@@ -649,17 +649,40 @@ inline void Crystal::GenerateOffsets ( const string &templateSelect ) {
     // float bondingOffsetTemplateValues[ 6 ];
     // vector< vec3 > bondingOffsets;
 
+// for now, reusing the previous setup:
+    const float xXx = 0.1618f + 0.3f * uniformRNG();
+    const float yYy = 0.618f + 0.1f * normalRNG();
+    const float zZz = 0.618f;
+
+    const float pi = 3.1415926535f;
+    const mat4 rX = glm::rotate( identity, 0.0f + uniformRNG(), normalize( vec3( 0.0f, 0.0f, 1.0f ) ) );
+    const mat4 rY = glm::rotate( identity, uniformRNG() * pi / 2.0f, normalize( vec3( 0.0f, 0.0f, 1.0f ) ) );
+    const mat4 rZ = glm::rotate( identity, pi / 5.0f, normalize( vec3( 1.0f, 0.0f, 0.0f ) ) );
+
+    // note that 6 bonding points is in no way a constraint here
+    simConfig.bondingOffsets = {
+        // rZ * vec4( 0.0f, 0.0f, -zZz, 0.0f ),
+        rZ * vec4( 0.0f, 0.0f, zZz, 0.0f ),
+        // rY * vec4( 0.0f, -yYy, 0.0f, 0.0f ),
+        rY * vec4( 0.0f, yYy, 0.0f, 0.0f ),
+        // rX * vec4( -xXx, 0.0f, 0.0f, 0.0f ),
+        rX * vec4( xXx, 0.0f, 0.0f, 0.0f ),
+    };
 }
 //=================================================================================================
 inline void Crystal::LoadSpecifiedConfig ( const string &path ) {
     // load a YAML string from a file
-
+        // todo
 }
 //=================================================================================================
 inline void Crystal::GenerateRandomConfig () {
 
     YAML::Emitter out;
     out << YAML::BeginMap;
+
+    // not going to do a lot right now
+    GenerateOffsets( "RANDOM" );
+    // todo: add to the config YAML
 
     simConfig.numParticlesScratch = 1000;
     out << YAML::Key << "numParticlesScratch";
@@ -713,6 +736,11 @@ inline void Crystal::GenerateRandomConfig () {
     out << YAML::Value << simConfig.spawnProbabilities[ 4 ];
     out << YAML::Key << "spawnProbabilityNegativeZ";
     out << YAML::Value << simConfig.spawnProbabilities[ 5 ];
+
+    // uniform spawn seems to create the best actual "crystal" behavior, so we will bias towards that
+    simConfig.spawnProbabilities[ 6 ] = 10.0f;
+    out << YAML::Key << "spawnProbabilityUniformVolume";
+    out << YAML::Value << simConfig.spawnProbabilities[ 6 ];
 
     simConfig.temperature = 1.0f + 10.0f * uniformRNG();
     out << YAML::Key << "temperature";
@@ -768,8 +796,8 @@ inline void Crystal::GenerateRandomConfig () {
 
     out << YAML::EndMap;
 
-    cout << "Configured:" << endl;
-    cout << out.c_str() << endl;
+    // cout << "Configured:" << endl;
+    // cout << out.c_str() << endl;
 }
 
 //=================================================================================================
@@ -839,12 +867,13 @@ inline void Crystal::UpdateParticle ( const int i ) {
 // this is the master thread over the worker threads on the crystal object
 inline void Crystal::MonitorThreadFunction () {
     // enter a loop
+    int iterations = 0;
     while ( true ) {
         // how do we quit? something indicated from the master
             // we will need a number of atomic signals... screenshot(atomic) + config, quit(atomic),
             // reset(atomic)
 
-        // triggering a screenshot is like,
+        // triggering a screenshot
 
         // what do we monitor?
             // some kind of flag we watch to indicate master wants a screenshot
@@ -852,6 +881,7 @@ inline void Crystal::MonitorThreadFunction () {
             // when you want to do a screenshot, if you need to prep data, do it here before cutting
                 // over to the worker threads to do the work
             // some kind of percentage completion, so that we can report that at the higher level
+
 
         // wait for the next iteration
         sleep_for( 100ms );
