@@ -69,19 +69,27 @@ Component GetUpdatedMenuComponent () {
                     Renderer([&, iC] {
                         if ( crystals[ iC ] != nullptr ) {
                             // this actually needs to prepare a status report with the crystal state
-                            const float percentageComplete = crystals[ iC ]->GetPercentage();
-                            const string stateString = crystals[ iC ]->GetStateString();
-                            return vbox({
-                                hbox({ text( to_string( iC ) + ": " + stateString + " " ), gauge( percentageComplete ), }),
-                                hbox({ text( "Min x: " + string( 5 - to_string( crystals[ iC ]->minExtents.x ).length(), ' ' ) + to_string( crystals[ iC ]->minExtents.x )
-                                            + " y: " + string( 5 - to_string( crystals[ iC ]->minExtents.y ).length(), ' ' ) + to_string( crystals[ iC ]->minExtents.y )
-                                            + " z: " + string( 5 - to_string( crystals[ iC ]->minExtents.z ).length(), ' ' ) + to_string( crystals[ iC ]->minExtents.z ) ),
-                                            text( " Job Counter: " + string( 20 - to_string( crystals[ iC ]->jobDispatch ).length(), ' ' ) + to_string( crystals[ iC ]->jobDispatch ) ) } ),
-                                hbox({ text( "Max x: " + string( 5 - to_string( crystals[ iC ]->maxExtents.x ).length(), ' ' ) + to_string( crystals[ iC ]->maxExtents.x )
-                                            + " y: " + string( 5 - to_string( crystals[ iC ]->maxExtents.y ).length(), ' ' ) + to_string( crystals[ iC ]->maxExtents.y )
-                                            + " z: " + string( 5 - to_string( crystals[ iC ]->maxExtents.z ).length(), ' ' ) + to_string( crystals[ iC ]->maxExtents.z ) ),
-                                            text( " Anchored:    " + string( 20 - to_string( crystals[ iC ]->particleStorageAllocator ).length(), ' ' ) + to_string( crystals[ iC ]->particleStorageAllocator ) ) } ),
-                            });
+                            // if ( crystals[ iC ]->running ) {
+                                const float percentageComplete = crystals[ iC ]->GetPercentage();
+                                const string stateString = crystals[ iC ]->GetStateString();
+                                return vbox({
+                                    hbox({ text( to_string( iC ) + ": " + stateString + " " ), gauge( percentageComplete ), }),
+                                    hbox({ text( "Min x: " + string( 5 - to_string( crystals[ iC ]->minExtents.x ).length(), ' ' ) + to_string( crystals[ iC ]->minExtents.x )
+                                                 + " y: " + string( 5 - to_string( crystals[ iC ]->minExtents.y ).length(), ' ' ) + to_string( crystals[ iC ]->minExtents.y )
+                                                 + " z: " + string( 5 - to_string( crystals[ iC ]->minExtents.z ).length(), ' ' ) + to_string( crystals[ iC ]->minExtents.z ) ),
+                                        text( " Job Counter: " + string( 20 - to_string( crystals[ iC ]->jobDispatch ).length(), ' ' ) + to_string( crystals[ iC ]->jobDispatch ) ) } ),
+                                    hbox({ text( "Max x: " + string( 5 - to_string( crystals[ iC ]->maxExtents.x ).length(), ' ' ) + to_string( crystals[ iC ]->maxExtents.x )
+                                                 + " y: " + string( 5 - to_string( crystals[ iC ]->maxExtents.y ).length(), ' ' ) + to_string( crystals[ iC ]->maxExtents.y )
+                                                 + " z: " + string( 5 - to_string( crystals[ iC ]->maxExtents.z ).length(), ' ' ) + to_string( crystals[ iC ]->maxExtents.z ) ),
+                                        text( " Anchored:    " + string( 20 - to_string( crystals[ iC ]->particleStorageAllocator ).length(), ' ' ) + to_string( crystals[ iC ]->particleStorageAllocator ) ) } ),
+                                });
+                            // } else {
+                                // return vbox({
+                                    // hbox({ text( "INITIALIZING..." ) }),
+                                    // hbox({ text( "  " ) }),
+                                    // hbox({ text( "  " ) }),
+                                // });
+                            // }
                         }
                         return vbox({
                             hbox({ text( "  " ) }),
@@ -150,8 +158,11 @@ int main ( int argc, char** argv ) {
         // cout << "Running Monitor Thread " << std::chrono::duration_cast< std::chrono::milliseconds >( high_resolution_clock::now() - tStart )  << "ms" << endl;
         threadKill = true;
 
-        for ( auto& c : crystals )
+        for ( auto& c : crystals ) {
+            // c->Shutdown();
+            // sleep_for( 10ms );
             c.reset();
+        }
     });
 
     procUpdaterThread.join();
