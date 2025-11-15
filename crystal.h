@@ -347,7 +347,7 @@ constexpr int gifDelay = 4;
 constexpr int imageWidth = 1280;
 constexpr int imageHeight = 720;
 constexpr int numPixels = imageWidth * imageHeight;
-constexpr int NUM_THREADS = 24;                     // threads of execution
+constexpr int NUM_THREADS = 1;                     // threads of execution
 constexpr int pad = 1000;                           // some extra particles as a safety buffer
 constexpr int GridCellMaxParticles = 128;           // this size might make sense to play with eventually
 //=================================================================================================
@@ -449,94 +449,8 @@ public:
 
     // worker thread function
     void WorkerThreadFunction ( int id );
-    
-    Crystal ( const string &yamlPath = "RANDOM" ) {
-    // SIM INIT
-        // fill out the config struct based on the YAML, or generate random + YAML
-            // constructor should take a YAML config or default to a randomly generated one
-        if ( yamlPath == "RANDOM" ) {
-            GenerateRandomConfig();
-        } else {
-            LoadSpecifiedConfig( yamlPath );
-        }
 
-        { // memory allocations
-            particleScratch.resize( simConfig.numParticlesScratch );
-            particleStorage.resize( simConfig.numParticlesStorage );
-            particleStorageAllocator = 0;
-
-            for ( auto& ptr : particleStorage ) {
-                // shared_ptr initialized as nullptr, interesting
-                ptr = make_shared< mat4 >();
-            }
-        }
-
-        { // create the importance sampling structure around spawning particles on faces/in the volume
-            float sum = 0.0f;
-            for ( const auto& s : simConfig.spawnProbabilities ) {
-                sum += s;
-            }
-
-            for ( auto& v : simConfig.importanceStructure ) {
-                // constructing a set of integer indices for the faces and uniform volume spawn to
-                    // uniformly pick at runtime to preferentially select based on probabilities
-                const float value = uniformRNG();
-                float sum2 = 0.0f;
-                for ( int i = 0; i < 7; i++ ) {
-                    sum2 += simConfig.spawnProbabilities[ i ] / sum;
-                    if ( value < sum2 ) {
-                        v = i; // this index is selected by the threshold check
-                        break;
-                    }
-                }
-            }
-        }
-
-        { // respawn all the particles in the pool
-            for ( int i = 0; i < simConfig.numParticlesScratch; i++ ) {
-                RespawnParticle( i );
-            }
-        }
-
-        // cout << "adding initial anchored particles" << endl;
-        { // add initial seed particles to the hashmap
-            for ( int i = 0; i < simConfig.numInitialSeedParticles; i++ ) {
-                // cout << "Adding particle " << i << endl;
-                // pick from the specified distribution
-                const vec3 p = glm::mix( vec3( simConfig.InitialSeedSpanMin ),
-                    vec3( simConfig.InitialSeedSpanMax ),
-                    vec3( uniformRNG(), uniformRNG(), uniformRNG() ) );
-
-                const vec3 axis = normalize( vec3( uniformRNG(), uniformRNG(), uniformRNG() ) );
-                const mat4 transform = glm::translate( glm::rotate( identity, 100.0f * normalRNG(), axis ), p );
-
-                AnchorParticle( ivec3( p ), transform );
-            }
-        }
-
-    // FONT LUT
-        // it is somewhat redundant to parse this every time... but whatever, it's
-            // just a small cost in the constructor, because it's not a large image
-
-        int x, y, n; // last arg set to 1 means give me 1 channel data out 
-        fontLUT = stbi_load( "fatFont.png", &x, &y, &n, 1 );
-
-    // SPAWNING THREADS
-        // a monitor thread which maintains a set of data for the master to access
-            // and also will control things like screenshots... I want that to be
-            // triggered by an atomic int "render" dispatcher being reset to 0 by
-            // this thread, and the worker threads each increment it to get a pixel
-            // to work on... if it is greater than the number of pixels in the image
-            // and the simulation has not completed, return to particle work
-
-        // a set of threads which function as the worker threads for the job system
-
-        monitorThread = thread( [ & ] () { MonitorThreadFunction(); } );
-        for ( int i = 0; i < NUM_THREADS; i++ ) {
-            workerThreads[ i ] = thread( [ & ] () { WorkerThreadFunction( i ); } );
-        }
-    }
-
+    Crystal ( string yamlPath );
     ~Crystal () {
         // need to signal termination to all the threads
         threadKill = true;
@@ -546,8 +460,7 @@ public:
         monitorThread.join();
         for ( auto& t : workerThreads )
             t.join();
-        
-        // Screenshot( "test.png" );
+
         Shutdown();
     }
 };
@@ -663,6 +576,93 @@ inline void Crystal::SaveCurrentImage ( const string &filename ) const {
 //=================================================================================================
 // External controls/public interface
 //=================================================================================================
+Crystal::Crystal ( const string yamlPath = "RANDOM" ) {
+// SIM INIT
+    // fill out the config struct based on the YAML, or generate random + YAML
+        // constructor should take a YAML config or default to a randomly generated one
+    if ( yamlPath == "RANDOM" ) {
+        GenerateRandomConfig();
+    } else {
+        LoadSpecifiedConfig( yamlPath );
+    }
+
+    { // memory allocations
+        particleScratch.resize( simConfig.numParticlesScratch );
+        particleStorage.resize( simConfig.numParticlesStorage );
+        particleStorageAllocator = 0;
+
+        for ( auto& ptr : particleStorage ) {
+            // shared_ptr initialized as nullptr, interesting
+            ptr = make_shared< mat4 >();
+        }
+    }
+
+    { // create the importance sampling structure around spawning particles on faces/in the volume
+        float sum = 0.0f;
+        for ( const auto& s : simConfig.spawnProbabilities ) {
+            sum += s;
+        }
+
+        for ( auto& v : simConfig.importanceStructure ) {
+            // constructing a set of integer indices for the faces and uniform volume spawn to
+                // uniformly pick at runtime to preferentially select based on probabilities
+            const float value = uniformRNG();
+            float sum2 = 0.0f;
+            for ( int i = 0; i < 7; i++ ) {
+                sum2 += simConfig.spawnProbabilities[ i ] / sum;
+                if ( value < sum2 ) {
+                    v = i; // this index is selected by the threshold check
+                    break;
+                }
+            }
+        }
+    }
+
+    { // respawn all the particles in the pool
+        for ( int i = 0; i < simConfig.numParticlesScratch; i++ ) {
+            RespawnParticle( i );
+        }
+    }
+
+    // cout << "adding initial anchored particles" << endl;
+    { // add initial seed particles to the hashmap
+        for ( int i = 0; i < simConfig.numInitialSeedParticles; i++ ) {
+            // cout << "Adding particle " << i << endl;
+            // pick from the specified distribution
+            const vec3 p = glm::mix( vec3( simConfig.InitialSeedSpanMin ),
+                vec3( simConfig.InitialSeedSpanMax ),
+                vec3( uniformRNG(), uniformRNG(), uniformRNG() ) );
+
+            const vec3 axis = normalize( vec3( uniformRNG(), uniformRNG(), uniformRNG() ) );
+            const mat4 transform = glm::translate( glm::rotate( identity, 100.0f * normalRNG(), axis ), p );
+
+            AnchorParticle( ivec3( p ), transform );
+        }
+    }
+
+// FONT LUT
+    // it is somewhat redundant to parse this every time... but whatever, it's
+        // just a small cost in the constructor, because it's not a large image
+
+    int x, y, n; // last arg set to 1 means give me 1 channel data out
+    fontLUT = stbi_load( "fatFont.png", &x, &y, &n, 1 );
+
+// SPAWNING THREADS
+    // a monitor thread which maintains a set of data for the master to access
+        // and also will control things like screenshots... I want that to be
+        // triggered by an atomic int "render" dispatcher being reset to 0 by
+        // this thread, and the worker threads each increment it to get a pixel
+        // to work on... if it is greater than the number of pixels in the image
+        // and the simulation has not completed, return to particle work
+
+    // a set of threads which function as the worker threads for the job system
+
+    monitorThread = thread( [ & ] () { MonitorThreadFunction(); } );
+    for ( int i = 0; i < NUM_THREADS; i++ ) {
+        workerThreads[ i ] = thread( [ & ] () { WorkerThreadFunction( i ); } );
+    }
+}
+
 void Crystal::Screenshot ( string filename = "timestamp" ) {
     // spawn a thread to prepare the data, tbd
         // should do any prep work, clear the image, and then signal
@@ -780,7 +780,7 @@ inline void Crystal::GenerateRandomConfig () {
     out << YAML::Key << "numParticlesScratch";
     out << YAML::Value << simConfig.numParticlesScratch;
 
-    simConfig.numParticlesStorage = 200'000;
+    simConfig.numParticlesStorage = 400'000;
     out << YAML::Key << "numParticlesStorage";
     out << YAML::Value << simConfig.numParticlesStorage;
 
