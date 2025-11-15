@@ -13,8 +13,73 @@
 // constexpr size_t HASH_SIZE_DEFAULT = 6917;
 // constexpr size_t HASH_SIZE_DEFAULT = 56999;
 // constexpr size_t HASH_SIZE_DEFAULT = 69001;
-// constexpr size_t HASH_SIZE_DEFAULT = 12207031;
-constexpr size_t HASH_SIZE_DEFAULT = 42643801;
+constexpr size_t HASH_SIZE_DEFAULT = 12207031;
+// constexpr size_t HASH_SIZE_DEFAULT = 42643801;
+
+/* This function calculates (ab)%c */
+int modulo(int a,int b,int c){
+  long long x=1,y=a; // long long is taken to avoid overflow of intermediate results
+  while(b > 0){
+    if(b%2 == 1){
+      x=(x*y)%c;
+    }
+    y = (y*y)%c; // squaring the base
+    b /= 2;
+  }
+  return x%c;
+}
+
+/* this function calculates (a*b)%c taking into account that a*b might overflow */
+long long mulmod(long long a,long long b,long long c){
+  long long x = 0,y=a%c;
+  while(b > 0){
+    if(b%2 == 1){
+      x = (x+y)%c;
+    }
+    y = (y*2)%c;
+    b /= 2;
+  }
+  return x%c;
+}
+
+/* Miller-Rabin primality test, iteration signifies the accuracy of the test */
+bool Miller(long long p,int iteration){
+  if(p<2){
+    return false;
+  }
+  if(p!=2 && p%2==0){
+    return false;
+  }
+  long long s=p-1;
+  while(s%2==0){
+    s/=2;
+  }
+  for(int i=0;i<iteration;i++){
+    long long a=rand()%(p-1)+1,temp=s;
+    long long mod=modulo(a,temp,p);
+    while(temp!=p-1 && mod!=1 && mod!=p-1){
+      mod=mulmod(mod,mod,p);
+      temp *= 2;
+    }
+    if(mod!=p-1 && temp%2==0){
+      return false;
+    }
+  }
+  return true;
+}
+
+int findNextIntGreaterThanN ( int n ) {
+  int i = 0;
+  if ( n % 2 == 0 )
+    i = n + 1;
+  else i = n;
+
+  for ( ; i < 2 * n; i += 2 ) // from Rajendra's answer
+    if ( Miller( i, 30 ) ) // 18-20 iterations are enough for most of the applications.
+      break;
+
+  return i;
+}
 
 namespace CTSL { // Concurrent Thread Safe Library
   // The class representing the hash map.
@@ -28,6 +93,7 @@ namespace CTSL { // Concurrent Thread Safe Library
   template <typename K, typename V, typename F = std::hash<K>> class HashMap  {
   public:
     HashMap( size_t hashSize_ = HASH_SIZE_DEFAULT ) : hashSize( hashSize_ ) {
+      // hashTable = new HashBucket< K, V >[ findNextIntGreaterThanN( hashSize / 2 ) ]; // not sure... tbd
       hashTable = new HashBucket< K, V >[ hashSize ]; // create the hash table as an array of hash buckets
     }
 
