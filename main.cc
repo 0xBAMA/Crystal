@@ -7,7 +7,7 @@
 atomic< bool > threadKill = false;
 
 // support stuff for the ui
-auto screen = ScreenInteractive::FixedSize( 100, 36 );
+auto screen = ScreenInteractive::FixedSize( 100, 50 );
 
 // list of crystals
 constexpr int numCrystalsMax = 10;
