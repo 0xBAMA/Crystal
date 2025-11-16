@@ -344,7 +344,7 @@ constexpr int gifDelay = 4;
 constexpr int imageWidth = 1280;
 constexpr int imageHeight = 720;
 constexpr int numPixels = imageWidth * imageHeight;
-constexpr int NUM_THREADS = 1;                     // threads of execution
+constexpr int NUM_THREADS = 24;                     // threads of execution
 constexpr int pad = 1000;                           // some extra particles as a safety buffer
 constexpr int GridCellMaxParticles = 128;           // this size might make sense to play with eventually
 //=================================================================================================
@@ -376,6 +376,10 @@ public:
     // managed logger, allowing for worker threads to submit timestamped messages
     // todo
 
+    // stuff for reporting state to the terminal UI thread
+    string GetStateString();
+    float GetPercentage();
+
     // some placeholder stuff, hooks for controls
     void Screenshot();
     void Save();
@@ -393,6 +397,7 @@ public:
     atomic_uintmax_t jobDispatch = 0;
     atomic_uintmax_t ssDispatch = numPixels + 1;                // prime it so that it will not indicate a screenshot at init
     atomic_uintmax_t ssComplete = 0;
+    mutex ssMutex;
 
     // scratch buffer to render an image
     uint8_t imageBuffer[ numPixels * 4 ];
@@ -512,14 +517,6 @@ public:
 
         int x, y, n; // last arg set to 1 means give me 1 channel data out 
         fontLUT = stbi_load( "fatFont.png", &x, &y, &n, 1 );
-
-        ClearImage();
-
-        // const string s = string( "TEST 123 TEST" );
-        // StampString( s, ivec2( 100, 200 ), ivec2( 1 ) );
-        // StampString( s, ivec2( 100, 250 ), ivec2( 1, 2 ) );
-        // StampString( s, ivec2( 100, 300 ), ivec2( 2, 1 ) );
-        // SaveCurrentImage( "test.png" );
 
     // SPAWNING THREADS
         // a monitor thread which maintains a set of data for the master to access
@@ -666,7 +663,37 @@ inline void Crystal::SaveCurrentImage ( const string &filename ) const {
     stbi_write_png( filename.c_str(), imageWidth, imageHeight, 4, &imageBuffer[ 0 ], 4 * imageWidth );
 }
 void Crystal::Screenshot () {
-    // spawn a thread? tbd
+    // spawn a thread to prepare the data, tbd
+        // should do any prep work, clear the image, and then signal
+
+    std::jthread t( [ & ] () {
+        lock_guard< mutex > lock( ssMutex ); // don't want to try to be doing more than one of these at once...
+
+        // clear to black
+        ClearImage();
+
+        // do any prep work for the image
+
+        // job system cuts over to render work
+        ssComplete = 0;
+        ssDispatch = 0;
+
+        // wait for it
+        while ( ssComplete < numPixels ) {
+            sleep_for( 1ms );
+        }
+
+        // const string s = string( "TEST 123 TEST" );
+        // StampString( s, ivec2( 100, 200 ), ivec2( 1 ) );
+        // StampString( s, ivec2( 100, 250 ), ivec2( 1, 2 ) );
+        // StampString( s, ivec2( 100, 300 ), ivec2( 2, 1 ) );
+
+        // save the image, now that it's done
+        SaveCurrentImage( "test.png" );
+    } );
+
+    // once the thread is spawned, we don't need to touch it...
+    t.detach(); // jthreads automatically rejoin on destruction
 }
 void Crystal::Quit () {
     // need to set threadkill? not sure what else... this maybe should just operate on the vector
