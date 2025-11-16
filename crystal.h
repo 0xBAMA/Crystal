@@ -65,6 +65,8 @@ using std::this_thread::sleep_for;
 #include <memory>
 using std::make_shared;
 using std::shared_ptr;
+using std::make_unique;
+using std::unique_ptr;
 //=================================================================================================
 // math/vector stuff
 #define GLM_FORCE_SWIZZLE
@@ -85,6 +87,7 @@ using glm::mat4;
 using glm::ivec2;
 using glm::pi;
 using glm::ivec3;
+using glm::ivec4;
 using glm::dot;
 using glm::clamp;
 
