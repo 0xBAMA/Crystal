@@ -36,9 +36,13 @@ Component GetUpdatedMenuComponent () {
                     Button({
                         .label = " Add Crystal ",
                         .on_click = [&] () {
-                            // this also needs to update the menu stuff with the information for the new crystal
-                            crystals[ numCrystals ] = make_shared< Crystal >();
-                            numCrystals++;
+                            for ( int i = 0; i < numCrystalsMax; i++ ) {
+                                if ( crystals[ i ] == nullptr ) { // take the first open slot
+                                    crystals[ i ] = make_shared< Crystal >();
+                                    break;
+                                }
+                                // if you don't find a null pointer, we are full, do not allocate a new crystal
+                            }
                         },
                         .transform = ButtonOption::Ascii().transform,
                     }),
@@ -83,16 +87,14 @@ Component GetUpdatedMenuComponent () {
                             hbox({ text( "  " ) }),
                         });
                     }),
-                    Renderer([](){ return text( "  " ); }),
                     Container::Horizontal({
-                        Button( " Save ", [&] () { crystals[ iC ]->Save(); }, ButtonOption::Ascii() ) | Maybe([&, iC]{ return numCrystals > iC; }),
+                        Button( " Save ", [ &, iC ] () { crystals[ iC ]->Save(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] != nullptr; }),
                         Renderer( []() { return text( "      " ); } ),
-                        Button( " Screenshot ", [&] () { crystals[ iC ]->Screenshot(); }, ButtonOption::Ascii() ) | Maybe( [&, iC]{ return numCrystals > iC; })
+                        Button( " Screenshot ", [ &, iC ] () { crystals[ iC ]->Screenshot(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] != nullptr; }),
                     }) | align_right,
-                    Renderer([](){ return text( "  " ); }),
                 }));
             }
-            return Container::Vertical(c );
+            return Container::Vertical( c );
         }(),
         .direction = Direction::Left,
         .main_size = &left_size,
