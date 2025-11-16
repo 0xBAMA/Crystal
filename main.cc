@@ -10,8 +10,8 @@ atomic< bool > threadKill = false;
 auto screen = ScreenInteractive::FixedSize( 100, 36 );
 
 // list of crystals
-constexpr int numCrystalsMax = 8;
-shared_ptr< Crystal > crystals[ numCrystalsMax ];
+constexpr int numCrystalsMax = 10;
+unique_ptr< Crystal > crystals[ numCrystalsMax ];
 
 int left_size = 36;
 std::chrono::time_point< std::chrono::system_clock > tStart;
@@ -37,7 +37,7 @@ Component GetUpdatedMenuComponent () {
                         .on_click = [&] () {
                             for ( int i = 0; i < numCrystalsMax; i++ ) {
                                 if ( crystals[ i ] == nullptr ) { // take the first open slot
-                                    crystals[ i ] = make_shared< Crystal >();
+                                    crystals[ i ] = make_unique< Crystal >();
                                     break;
                                 }
                                 // if you don't find a null pointer, we are full, do not allocate a new crystal
@@ -90,7 +90,7 @@ Component GetUpdatedMenuComponent () {
                         });
                     }),
                     Container::Horizontal({
-                        Button( " Add ", [ &, iC ] () { std::jthread t( [ & ] () { crystals[ iC ] = make_shared< Crystal >(); } ); t.detach(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] == nullptr; }),
+                        Button( " Add ", [ &, iC ] () { std::jthread t( [ & ] () { crystals[ iC ] = make_unique< Crystal >(); } ); t.detach(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] == nullptr; }),
                         Button( " Save ", [ &, iC ] () { crystals[ iC ]->Save(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] != nullptr; }),
                         Renderer( []() { return text( "      " ); } ),
                         Button( " Screenshot ", [ &, iC ] () { crystals[ iC ]->Screenshot(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] != nullptr; }),
@@ -149,6 +149,9 @@ int main ( int argc, char** argv ) {
 
         // cout << "Running Monitor Thread " << std::chrono::duration_cast< std::chrono::milliseconds >( high_resolution_clock::now() - tStart )  << "ms" << endl;
         threadKill = true;
+
+        for ( auto& c : crystals )
+            c.reset();
     });
 
     procUpdaterThread.join();
