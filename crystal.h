@@ -611,7 +611,8 @@ inline void Crystal::DrawPixel ( const uint32_t x, const uint32_t y ) {
 
             // shadow ray trace
 
-        // color = vec3( 1.0f );
+        color = vec3( 1.0f );
+        sleep_for( 10us );
 
     } // else you are in the black bars area
         // I want to do the labels single threaded, not much sense making it
@@ -937,7 +938,7 @@ inline void Crystal::RespawnParticle ( const int i ) {
 //=================================================================================================
 // do an update on the particle
 inline void Crystal::UpdateParticle ( const int i ) {
-
+    AnchorParticle( ivec3( int( 100.0f * uniformRNG() ), int( 100.0f * uniformRNG() ), int( 100.0f * uniformRNG() ) ), mat4( 1.0f ) );
 }
 //=================================================================================================
 // this is the master thread over the worker threads on the crystal object
@@ -993,16 +994,16 @@ inline void Crystal::WorkerThreadFunction ( int id ) {
         uintmax_t i;
         const bool work = ParticleUpdateIndicated( i );
 
-        // if ( !ss && !work ) {
+        if ( !ss && !work ) {
             // there is no work to do right now
-            // sleep_for( 1ms );
-        // } else if ( ss ) {
-        if ( ss ) {
+            sleep_for( 1ms );
+        } else if ( ss ) {
+        // if ( ss ) {
             // we have secured work for one pixel
             DrawPixel( x, y );
             ++ssComplete; // helps with reporting "percentage complete"
-        // } else if ( work ) {
-        } else {
+        } else if ( work ) {
+        // } else {
             // we need to do work for one particle update, index indicated by the job counter i
             UpdateParticle( i % simConfig.numParticlesScratch );
         }
