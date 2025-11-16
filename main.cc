@@ -87,6 +87,7 @@ Component GetUpdatedMenuComponent () {
                         });
                     }),
                     Container::Horizontal({
+                        Button( " Add ", [ &, iC ] () { crystals[ iC ] = make_shared< Crystal >(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] == nullptr; }),
                         Button( " Save ", [ &, iC ] () { crystals[ iC ]->Save(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] != nullptr; }),
                         Renderer( []() { return text( "      " ); } ),
                         Button( " Screenshot ", [ &, iC ] () { crystals[ iC ]->Screenshot(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] != nullptr; }),
