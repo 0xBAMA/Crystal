@@ -573,8 +573,8 @@ inline void Crystal::DrawPixel ( const uint32_t x, const uint32_t y ) {
                             vec3 pShadow = p;
                             vec3 shadowTerm = vec3( 1.0f );
 
-                            const vec3 dir1 = normalize( p - vec3( mix( minExtents.xy(), maxExtents.xy(), vec2( 0.1f * normalRNG() + 0.5f ) ), maxExtentsIn.z ) );
-                            const vec3 dir2 = normalize( p - vec3( mix( minExtents.xy(), maxExtents.xy(), vec2( uniformRNG(), 0.5f ) ), minExtentsIn.z ) );
+                            const vec3 dir1 = normalize( p - vec3( mix( minExtents.xy(), maxExtents.xy(), vec2( 0.5f * uniformRNG() + 0.75f, 0.5f * uniformRNG() + 0.75f ) ), maxExtentsIn.z ) );
+                            // const vec3 dir2 = normalize( p - vec3( mix( minExtents.xy(), maxExtents.xy(), vec2( uniformRNG(), 0.5f ) ), minExtentsIn.z ) );
 
                             // shadow ray trace(s)
                             for ( int j = 0; j < 200; j++ ) {
@@ -590,6 +590,8 @@ inline void Crystal::DrawPixel ( const uint32_t x, const uint32_t y ) {
                                 }
                             }
 
+                            /*
+
                             pShadow = p;
                             for ( int j = 0; j < 200; j++ ) {
                             // light direction needs to go on renderconfig
@@ -603,7 +605,6 @@ inline void Crystal::DrawPixel ( const uint32_t x, const uint32_t y ) {
                                 }
                             }
 
-                            /*
                             pShadow = p;
                             for ( int j = 0; j < 20; j++ ) {
                             // light direction needs to go on renderconfig
@@ -619,7 +620,7 @@ inline void Crystal::DrawPixel ( const uint32_t x, const uint32_t y ) {
                             */
 
                             //  color needs to go on renderconfig
-                            color += temp.rgb() * (  2.0f * vec3( 0.1f, 0.2f, 0.6f ) * shadowTerm.r + vec3( 0.5f, 0.0f, 0.0f ) * shadowTerm.g + vec3( 0.1f ) );
+                            color += temp.rgb() * (  2.0f * vec3( 0.1f, 0.2f, 0.6f ) * shadowTerm.r + vec3( 0.1f ) );
                             // color += turbo( float( i ) / float( maxDistance ) );
                             hits++;
                             // break;
