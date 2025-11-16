@@ -105,18 +105,11 @@ Component GetUpdatedMenuComponent () {
             screen.ExitLoopClosure()();
             return true;
         }
-
-        // if ( event == Event::Character('w') ) {
-        //     // prepareOutputScreenshot();
-        //     // prepareOutputScreenshotDeltaTracking();
-        //     return true;
-        // }
-
+        // something to generate a composite screenshot of all running crystals?
         return false;
     });
 }
 
-Component componentHandle;
 
 int main ( int argc, char** argv ) {
 	tStart = high_resolution_clock::now();
@@ -140,9 +133,7 @@ int main ( int argc, char** argv ) {
     cout << "Spawning Terminal UI Thread... ";
 	std::thread terminalUIThread = std::thread( [&] () {
 	 // this is the master thread
-	    componentHandle = GetUpdatedMenuComponent();
-
-	    crystals[ 3 ] = make_shared< Crystal >();
+        Component componentHandle = GetUpdatedMenuComponent();
 
         cout << "Entering Main Loop..." << endl;
         ftxui::Loop loop( &screen, componentHandle );

@@ -612,7 +612,6 @@ inline void Crystal::DrawPixel ( const uint32_t x, const uint32_t y ) {
             // shadow ray trace
 
         // color = vec3( 1.0f );
-        color = vec3( uniformRNG() );
 
     } // else you are in the black bars area
         // I want to do the labels single threaded, not much sense making it
