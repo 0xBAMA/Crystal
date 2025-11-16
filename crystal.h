@@ -416,8 +416,8 @@ public:
     void DrawPixel ( uint32_t x, uint32_t y );                  // this will only touch that pixel's memory... still need sync for resources we read from
     bool GlyphRef ( const uint8_t &c, ivec2 offset ) const;     // reference the font LUT
     void SaveCurrentImage ( const string &filename ) const;     // save out the current framebuffer state
-    void StampString ( const string &s, ivec2 location, ivec2 scale ); // write a string onto the image
-    void StampChar ( const uint8_t &c, ivec2 location, ivec2 scale ); // called by StampString
+    void StampString ( const string &s, ivec2 location, ivec2 scale, ivec4 color ); // write a string onto the image
+    void StampChar ( const uint8_t &c, ivec2 location, ivec2 scale, ivec4 color ); // called by StampString
 
     // global sim resources (particle + pointer pools, ivec3->gridCell hashmap)    
     vector< vec4 > particleScratch;                             // state for floating particles (diffusion limit mechanism)
@@ -634,14 +634,14 @@ inline bool Crystal::GlyphRef ( const uint8_t &c, const ivec2 offset ) const {
     return fontLUT[ samplePoint.x + samplePoint.y * 7 * 16 ];
 }
 //=================================================================================================
-inline void Crystal::StampString ( const string &s, ivec2 location, const ivec2 scale ) {
+inline void Crystal::StampString ( const string &s, ivec2 location, const ivec2 scale, const ivec4 color ) {
     for ( const uint8_t c : s ) {
-        StampChar( c, location, scale );
+        StampChar( c, location, scale, glm::clamp( color, ivec4( 0 ), ivec4( 255 ) ) );
         location.x += scale.x * 8; // 7px + 1px pad
     }
 }
 //=================================================================================================
-inline void Crystal::StampChar ( const uint8_t &c, ivec2 location, const ivec2 scale ) {
+inline void Crystal::StampChar ( const uint8_t &c, ivec2 location, const ivec2 scale, const ivec4 color ) {
     for ( int y = 0; y < 7 * scale.y; y++ ) {
         for ( int x = 0; x < 7 * scale.x; x++ ) {
             const ivec2 writeLoc = location + ivec2( x, y );
@@ -650,10 +650,13 @@ inline void Crystal::StampChar ( const uint8_t &c, ivec2 location, const ivec2 s
             // check px against the font LUT
             if ( GlyphRef( c, px ) ) {
                 uint32_t idx = 4 * ( writeLoc.x + imageWidth * writeLoc.y );
-                imageBuffer[ idx + 0 ] = 255;
-                imageBuffer[ idx + 1 ] = 255;
-                imageBuffer[ idx + 2 ] = 255;
-                imageBuffer[ idx + 3 ] = 255;
+                // if ( color.a != 255 ) {
+                    // we are doing serial computation, no data races, let's do the alpha blending...
+                // }
+                imageBuffer[ idx + 0 ] = color.r;
+                imageBuffer[ idx + 1 ] = color.g;
+                imageBuffer[ idx + 2 ] = color.b;
+                imageBuffer[ idx + 3 ] = color.a;
             }
         }
     }
