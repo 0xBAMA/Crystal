@@ -503,30 +503,79 @@ inline void Crystal::DrawPixel ( const uint32_t x, const uint32_t y ) {
     const vec2 lowThresh = vec2( 0, 0.5f / ratio );
     const vec2 highThresh = vec2( 1, 1.0f - 0.5f / ratio );
 
+    const vec3 minExtentsIn = minExtents;
+    const vec3 maxExtentsIn = maxExtents ;
+
     vec3 color = vec3( 0.0f );
+    int hits = 0;
     shared_lock lock( imageMutex );
     if ( glm::all( glm::lessThan( uv, highThresh ) ) &&
         glm::all( glm::greaterThan( uv, lowThresh ) ) ) {
         // we are in the area of the image where we need to do additional work to render
 
         // ray setup
+        vec2 uvAdjust = ( uv - vec2( 0.5f, 0.5f ) ) * vec2( 1.0f, float( imageHeight ) / float( imageWidth ) );
+        // mat4 inverseTransform = glm::inverse( transform );
+        vec3 rO = vec4( vec3( std::max( 200.0f, float( std::max( maxExtents.x - minExtents.x, std::max( maxExtents.y - minExtents.y, maxExtents.z - minExtents.z ) ) ) ) * uvAdjust, -200 ), 1.0f );
+        vec3 rD = vec4( 0.0f, 0.0f, 1.0f, 0.0f );
 
         // bounds intersection
+        int maxDistance = int( std::ceil( glm::distance( vec3( minExtents ), vec3( maxExtents ) ) ) );
+        float tMin, tMax;
+        if ( IntersectAABB( rO, rD, minExtentsIn, maxExtentsIn, tMin, tMax ) ) {
 
-        // delta track raymarch
+            // delta track raymarch
+            vec3 p = rO + max( 0.0f, tMin ) * rD;
+            constexpr int samples = 128;
+            for ( int s = 0; s < samples; s++ ) {
+                for ( int i = 0; i < maxDistance; i++ ) {
+                    float t = -log( uniformRNG() );
+                    p += t * rD;
 
-            // shadow ray trace
+                    if ( glm::any( glm::lessThanEqual( p, vec3( minExtentsIn ) ) ) ||
+                        glm::any( glm::greaterThanEqual( p, vec3( maxExtentsIn ) ) ) ) {
+                        // oob
+                        break;
+                    }
 
-        color = vec3( 1.0f );
-        sleep_for( 10us );
+                    shared_ptr< GridCell > temp;
+                    if ( anchoredParticles.find( ivec3( p ), temp ) ) {
+                        if ( ( temp->GetCount() / 128.0f ) > uniformRNG() ) { // this is the hit condition...
+                            // do we hit something, going up?
+                            vec3 pShadow = p;
+                            float shadowTerm = 1.0f;
 
+                            // shadow ray trace
+                            for ( int j = 0; j < 50; j++ ) {
+                            // light direction needs to go on renderconfig
+                                const vec3 lightDirection = vec3( 1.0f );
+                                pShadow += lightDirection * float( -log( uniformRNG() ) );
+                                shared_ptr< GridCell > tempShadow;
+                                if ( anchoredParticles.find( ivec3( pShadow ), tempShadow ) ) {
+                                    if ( ( temp->GetCount() / 128.0f ) > uniformRNG() ) {
+                                        shadowTerm = 0.1f;
+                                    }
+                                }
+                            }
+
+                            //  color needs to go on renderconfig
+                            color += vec3( shadowTerm );
+                            // color += turbo( float( i ) / float( maxDistance ) );
+                            hits++;
+                            // break;
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
     } // else you are in the black bars area
         // I want to do the labels single threaded, not much sense making it
-        // more complicated trying to evaluate a list of glyphs here, it is
-        // basically
+        // more complicated trying to evaluate a list of glyphs here
 
+    color /= float( hits );
 
-    // write the color to the image
+    // write the color to the image... this might move into the condition because we already overwrote with black opaque
     const uint32_t baseIdx = 4 * ( x + imageWidth * y );
     imageBuffer[ baseIdx + 0 ] = std::clamp( 255.0f * color.r, 0.0f, 255.0f );
     imageBuffer[ baseIdx + 1 ] = std::clamp( 255.0f * color.g, 0.0f, 255.0f );
@@ -569,6 +618,7 @@ inline void Crystal::StampChar ( const uint8_t &c, ivec2 location, const ivec2 s
 }
 //=================================================================================================
 inline void Crystal::SaveCurrentImage ( const string &filename ) const {
+    // unique_lock lock( imageMutex );
     stbi_write_png( filename.c_str(), imageWidth, imageHeight, 4, &imageBuffer[ 0 ], 4 * imageWidth );
 }
 //=================================================================================================
@@ -670,10 +720,10 @@ void Crystal::Screenshot ( string filename = "timestamp" ) {
         auto inTime_t = std::chrono::system_clock::to_time_t( now );
         std::stringstream ssA;
         ssA << std::put_time( std::localtime( &inTime_t ), "Crystal-Screenshot-%Y-%m-%d at %H-%M-%S.png" );
-        filename = ssA.str();
+        filename = ssA.str().c_str();
     }
 
-    std::jthread t( [ & ] () {
+    std::jthread t( [ &, filename ] () {
         lock_guard< mutex > lock( ssMutex ); // don't want to try to be doing more than one of these at once...
 
         // clear to black
@@ -691,12 +741,12 @@ void Crystal::Screenshot ( string filename = "timestamp" ) {
         }
 
         const string s = string( "TEST 123 TEST" );
-        StampString( s, ivec2( 100, 200 ), ivec2( 1 ),    ivec4( 255, 189, 32, 255 ) );
+        StampString( s, ivec2( 100, 200 ), ivec2( 1 ),  ivec4( 255, 189, 32, 255 ) );
         StampString( s, ivec2( 100, 250 ), ivec2( 1, 2 ), ivec4( 255, 189, 32, 255 ) );
         StampString( s, ivec2( 100, 300 ), ivec2( 2, 1 ), ivec4( 255, 189, 32, 255 ) );
 
         // save the image, now that it's done
-        SaveCurrentImage( "test.png" );
+        SaveCurrentImage( filename );
     } );
 
     // once the thread is spawned, we don't need to touch it...
@@ -712,6 +762,7 @@ void Crystal::Shutdown () {
 //=================================================================================================
 void Crystal::Save () {
     // save out the model
+
 }
 //=================================================================================================
 // particle support functions
@@ -782,7 +833,7 @@ inline void Crystal::GenerateRandomConfig () {
     out << YAML::Key << "numParticlesStorage";
     out << YAML::Value << simConfig.numParticlesStorage;
 
-    simConfig.numInitialSeedParticles = std::max( uint32_t( 200 * std::pow( uniformRNG(), 4.0f ) ), 1u );
+    simConfig.numInitialSeedParticles = std::max( uint32_t( 200 * std::pow( uniformRNG(), 3.0f ) ), 1u );
     out << YAML::Key << "numInitialSeedParticles";
     out << YAML::Value << simConfig.numInitialSeedParticles;
 
