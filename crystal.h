@@ -560,6 +560,27 @@ public:
     }
 };
 //=================================================================================================
+// for monitoring state
+inline string Crystal::GetStateString () {
+    // options are "WORKING", "RENDERING", "FINISHED"
+    if ( ssComplete < numPixels && ssDispatch < numPixels )
+        return string( "RENDERING" );
+    else if ( particleStorageAllocator < ( simConfig.numParticlesStorage - pad ) )
+        return string( "WORKING" );
+    else
+        return string( "FINISHED" );
+}
+
+inline float Crystal::GetPercentage () {
+    string ss = GetStateString(); 
+    if ( ss == "WORKING" )
+        return float( particleStorageAllocator ) / float( simConfig.numParticlesStorage );
+    else if ( ss == "RENDERING" )
+        return float( ssComplete ) / float( numPixels );
+    else // "FINISHED"
+        return 1.0f;
+}
+//=================================================================================================
 // screenshot utilities
 //=================================================================================================
 inline void Crystal::ClearImage () {

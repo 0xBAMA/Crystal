@@ -71,12 +71,17 @@ Component GetUpdatedMenuComponent () {
                 const int iC = i;
                 c.push_back( Container::Vertical({
                     Renderer([&, iC] {
-                        // this needs to prepare
-                        if ( iC < numCrystals ) {
+                        if ( crystals[ iC ] != nullptr ) {
                             // this actually needs to prepare a status report with the crystal state
-                            return hbox({ text( "Crystal " + to_string( iC ) + " found." ) });
+                            const float percentageComplete = crystals[ iC ]->GetPercentage();
+                            const string stateString = crystals[ iC ]->GetStateString();
+                            return hbox({ text( to_string( iC ) + ": " + stateString + " " ), gauge( percentageComplete ), });
                         }
-                        return hbox({ text( "Crystal not found." ) | color( Color::RGB( 64, 64, 64 ) ) });
+                        return vbox({
+                            hbox({ text( "  " ) }),
+                            hbox({ text( "Crystal not found." ) | color( Color::RGB( 64, 64, 64 ) ) }),
+                            hbox({ text( "  " ) }),
+                        });
                     }),
                     Renderer([](){ return text( "  " ); }),
                     Container::Horizontal({
