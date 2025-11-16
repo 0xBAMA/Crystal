@@ -386,7 +386,7 @@ public:
     // some placeholder stuff, hooks for controls
     void Screenshot( string filename );
     void Save();
-    void Quit();
+    void Shutdown();
 
     // threads managed by constructor/destructor
     thread monitorThread;
@@ -538,7 +538,6 @@ public:
     }
 
     ~Crystal () {
-
         // need to signal termination to all the threads
         threadKill = true;
         sleep_for( 69ms );
@@ -547,16 +546,9 @@ public:
         monitorThread.join();
         for ( auto& t : workerThreads )
             t.join();
-
-        // save out the current model, all the bound particles + YAML string
-        auto now = std::chrono::system_clock::now();
-        auto inTime_t = std::chrono::system_clock::to_time_t( now );
-        std::stringstream ssA;
-        ssA << std::put_time( std::localtime( &inTime_t ), "Crystal-Model-%Y-%m-%d at %H-%M-%S.png" );
-
-        // SaveModel( ssA.str().c_str() );
-        SaveCurrentImage( ssA.str() );
         
+        // Screenshot( "test.png" );
+        Shutdown();
     }
 };
 //=================================================================================================
@@ -700,10 +692,10 @@ void Crystal::Screenshot ( string filename = "timestamp" ) {
             sleep_for( 1ms );
         }
 
-        // const string s = string( "TEST 123 TEST" );
-        // StampString( s, ivec2( 100, 200 ), ivec2( 1 ) );
-        // StampString( s, ivec2( 100, 250 ), ivec2( 1, 2 ) );
-        // StampString( s, ivec2( 100, 300 ), ivec2( 2, 1 ) );
+        const string s = string( "TEST 123 TEST" );
+        StampString( s, ivec2( 100, 200 ), ivec2( 1 ),    ivec4( 255, 189, 32, 255 ) );
+        StampString( s, ivec2( 100, 250 ), ivec2( 1, 2 ), ivec4( 255, 189, 32, 255 ) );
+        StampString( s, ivec2( 100, 300 ), ivec2( 2, 1 ), ivec4( 255, 189, 32, 255 ) );
 
         // save the image, now that it's done
         SaveCurrentImage( "test.png" );
@@ -712,9 +704,14 @@ void Crystal::Screenshot ( string filename = "timestamp" ) {
     // once the thread is spawned, we don't need to touch it...
     t.detach(); // jthreads automatically rejoin on destruction
 }
-void Crystal::Quit () {
-    // need to set threadkill? not sure what else... this maybe should just operate on the vector
+//=================================================================================================
+void Crystal::Shutdown () {
+    // need to set threadkill?
+        // save the crystal if we haven't saved in the last 10 seconds or so...
+        // also do a screenshot if it's been running at least 10 seconds...
+    threadKill = true;
 }
+//=================================================================================================
 void Crystal::Save () {
     // save out the model
 }
@@ -961,7 +958,7 @@ inline void Crystal::UpdateParticle ( const int i ) {
 // this is the master thread over the worker threads on the crystal object
 inline void Crystal::MonitorThreadFunction () {
     // enter a loop
-    while ( true ) {
+    while ( !threadKill ) {
         // how do we quit? something indicated from the master
             // we will need a number of atomic signals... screenshot(atomic) + config, quit(atomic),
             // reset(atomic)
@@ -989,7 +986,7 @@ inline void Crystal::MonitorThreadFunction () {
         
     }
     // when we drop out, indicate termination to the other threads
-    threadKill = true;
+    threadKill = true; // belt and suspenders...
 }
 //=================================================================================================
 // worker thread, doing the particle update
