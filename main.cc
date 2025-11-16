@@ -57,13 +57,6 @@ Component GetUpdatedMenuComponent () {
                  auto c2 = color( Color::RGB( 255, 255, 34 ) );
                  return vbox({
                      hbox({ text( "Uptime:              " ) | c1, text( std::to_string( float( std::chrono::duration< float, std::milli >( high_resolution_clock::now() - tStart ).count() ) / 1000.0f ) ) | c2, text( "s" ) | c1 }),
-                     // hbox({ text( "Job Counter:         " ) | c1, text( std::to_string( jobCounter.load() ) ) | c2 }),
-                     // hbox({ text( "Anchored Particles:  " ) | c1, text( std::to_string( numAnchored ) ) | c2 }),
-                     hbox({ text( "Extents:" ) | c1 }),
-                     // hbox({ text( " x:  " ) | c1, text( to_string( minExtents.x ) + " " ) | c2, text( to_string( maxExtents.x ) ) | c2 }),
-                     // hbox({ text( " y:  " ) | c1, text( to_string( minExtents.y ) + " " ) | c2, text( to_string( maxExtents.y ) ) | c2 }),
-                     // hbox({ text( " z:  " ) | c1, text( to_string( minExtents.z ) + " " ) | c2, text( to_string( maxExtents.z ) ) | c2 }),
-                     // hbox({ text( "Frames Queued: " ) | c1, text( to_string( pointerPoolAllocator / particlesPerStep ) ) | c2 }),
                  });
              })
         }),
@@ -78,7 +71,17 @@ Component GetUpdatedMenuComponent () {
                             // this actually needs to prepare a status report with the crystal state
                             const float percentageComplete = crystals[ iC ]->GetPercentage();
                             const string stateString = crystals[ iC ]->GetStateString();
-                            return hbox({ text( to_string( iC ) + ": " + stateString + " " ), gauge( percentageComplete ), });
+                            return vbox({
+                                hbox({ text( to_string( iC ) + ": " + stateString + " " ), gauge( percentageComplete ), }),
+                                hbox({ text( "Min x: " + string( 5 - to_string( crystals[ iC ]->minExtents.x ).length(), ' ' ) + to_string( crystals[ iC ]->minExtents.x )
+                                            + " y: " + string( 5 - to_string( crystals[ iC ]->minExtents.y ).length(), ' ' ) + to_string( crystals[ iC ]->minExtents.y )
+                                            + " z: " + string( 5 - to_string( crystals[ iC ]->minExtents.z ).length(), ' ' ) + to_string( crystals[ iC ]->minExtents.z ) ),
+                                            text( " Job Counter: " + string( 20 - to_string( crystals[ iC ]->jobDispatch ).length(), ' ' ) + to_string( crystals[ iC ]->jobDispatch ) ) } ),
+                                hbox({ text( "Max x: " + string( 5 - to_string( crystals[ iC ]->maxExtents.x ).length(), ' ' ) + to_string( crystals[ iC ]->maxExtents.x )
+                                            + " y: " + string( 5 - to_string( crystals[ iC ]->maxExtents.y ).length(), ' ' ) + to_string( crystals[ iC ]->maxExtents.y )
+                                            + " z: " + string( 5 - to_string( crystals[ iC ]->maxExtents.z ).length(), ' ' ) + to_string( crystals[ iC ]->maxExtents.z ) ),
+                                            text( " Anchored:    " + string( 20 - to_string( crystals[ iC ]->particleStorageAllocator ).length(), ' ' ) + to_string( crystals[ iC ]->particleStorageAllocator ) ) } ),
+                            });
                         }
                         return vbox({
                             hbox({ text( "  " ) }),
