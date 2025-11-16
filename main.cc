@@ -11,7 +11,6 @@ auto screen = ScreenInteractive::FixedSize( 100, 36 );
 
 // list of crystals
 constexpr int numCrystalsMax = 8;
-int numCrystals = 0;
 shared_ptr< Crystal > crystals[ numCrystalsMax ];
 
 int left_size = 36;
@@ -100,7 +99,7 @@ Component GetUpdatedMenuComponent () {
         .main_size = &left_size,
         .separator_func = [] { return separatorHeavy(); },
     }) | borderHeavy,
-[&]( Event event ) {
+    [&]( Event event ) {
         if ( event == Event::Character( 'q' ) ) {
             screen.ExitLoopClosure()();
             return true;
@@ -141,6 +140,8 @@ int main ( int argc, char** argv ) {
 	std::thread terminalUIThread = std::thread( [&] () {
 	 // this is the master thread
 	    componentHandle = GetUpdatedMenuComponent();
+
+	    crystals[ 3 ] = make_shared< Crystal >();
 
         cout << "Entering Main Loop..." << endl;
         ftxui::Loop loop( &screen, componentHandle );
