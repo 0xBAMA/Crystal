@@ -7,7 +7,7 @@
 atomic< bool > threadKill = false;
 
 // support stuff for the ui
-auto screen = ScreenInteractive::FixedSize( 100, 50 );
+auto screen = ScreenInteractive::FixedSize( 120, 50 );
 
 // list of crystals
 constexpr int numCrystalsMax = 10;
@@ -74,14 +74,14 @@ Component GetUpdatedMenuComponent () {
                                 const string stateString = crystals[ iC ]->GetStateString();
                                 return vbox({
                                     hbox({ text( to_string( iC ) + ": " + stateString + " " ), gauge( percentageComplete ), }),
-                                    hbox({ text( "Min x: " + string( 5 - to_string( crystals[ iC ]->minExtents.x ).length(), ' ' ) + to_string( crystals[ iC ]->minExtents.x )
+                                    flexbox({ text( "Min x: " + string( 5 - to_string( crystals[ iC ]->minExtents.x ).length(), ' ' ) + to_string( crystals[ iC ]->minExtents.x )
                                                  + " y: " + string( 5 - to_string( crystals[ iC ]->minExtents.y ).length(), ' ' ) + to_string( crystals[ iC ]->minExtents.y )
                                                  + " z: " + string( 5 - to_string( crystals[ iC ]->minExtents.z ).length(), ' ' ) + to_string( crystals[ iC ]->minExtents.z ) ),
-                                        text( " Job Counter: " + string( 20 - to_string( crystals[ iC ]->jobDispatch ).length(), ' ' ) + to_string( crystals[ iC ]->jobDispatch ) ) } ),
-                                    hbox({ text( "Max x: " + string( 5 - to_string( crystals[ iC ]->maxExtents.x ).length(), ' ' ) + to_string( crystals[ iC ]->maxExtents.x )
+                                        text( "              Job Counter: " + string( 20 - to_string( crystals[ iC ]->jobDispatch ).length(), ' ' ) + to_string( crystals[ iC ]->jobDispatch ) ) | align_right } ),
+                                    flexbox({ text( "Max x: " + string( 5 - to_string( crystals[ iC ]->maxExtents.x ).length(), ' ' ) + to_string( crystals[ iC ]->maxExtents.x )
                                                  + " y: " + string( 5 - to_string( crystals[ iC ]->maxExtents.y ).length(), ' ' ) + to_string( crystals[ iC ]->maxExtents.y )
                                                  + " z: " + string( 5 - to_string( crystals[ iC ]->maxExtents.z ).length(), ' ' ) + to_string( crystals[ iC ]->maxExtents.z ) ),
-                                        text( " Anchored:    " + string( 20 - to_string( crystals[ iC ]->particleStorageAllocator ).length(), ' ' ) + to_string( crystals[ iC ]->particleStorageAllocator ) ) } ),
+                                        text( "              Anchored:    " + string( 20 - to_string( crystals[ iC ]->particleStorageAllocator ).length(), ' ' ) + to_string( crystals[ iC ]->particleStorageAllocator ) ) | align_right } ),
                                 });
                             // } else {
                                 // return vbox({
@@ -99,6 +99,7 @@ Component GetUpdatedMenuComponent () {
                     }),
                     Container::Horizontal({
                         Button( " Add ", [ &, iC ] () { std::jthread t( [ & ] () { crystals[ iC ] = make_unique< Crystal >(); } ); t.detach(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] == nullptr; }),
+                        // reset button
                         Button( " Save ", [ &, iC ] () { crystals[ iC ]->Save(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] != nullptr; }),
                         Renderer( []() { return text( "      " ); } ),
                         Button( " Screenshot ", [ &, iC ] () { crystals[ iC ]->Screenshot(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] != nullptr; }),

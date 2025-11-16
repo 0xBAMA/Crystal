@@ -287,7 +287,7 @@ struct CrystalSimConfig {
     string bondingOffsetTemplate;
     float bondingOffsetTemplateValues[ 6 ]; // a,b,c,alpha,beta,gamma
     // do we need something to represent symmetry?
-    vector< vec3 > bondingOffsets; // simulation runtime bonding offsets
+    vector< vec4 > bondingOffsets; // simulation runtime bonding offsets
 
     // scale factor for particle jitter
     float temperature;
