@@ -358,17 +358,15 @@ struct GridCell {
 
     GridCell () { particles.reserve( GridCellMaxParticles ); }
 
-    // size_t GetCount () {
-        // this is the non-exclusive read mutex
-        // std::shared_lock lock( mutex );
-        // return particles.size();
-    // }
+    size_t GetCount () {
+        shared_lock lock( mutex ); // this is the non-exclusive read mutex
+        return particles.size();
+    }
 
-    // shared_ptr< mat4 > Get( const int &idx ) {
-        // locking the non-exclusive read mutex
-        // std::shared_lock lock( mutex );
-        // return particles[ idx ];
-    // }
+    shared_ptr< mat4 > Get( const int &idx ) {
+        shared_lock lock( mutex ); // locking the non-exclusive read mutex
+        return particles[ idx ];
+    }
 
 };
 //=================================================================================================
@@ -952,7 +950,107 @@ inline void Crystal::RespawnParticle ( const int i ) {
 //=================================================================================================
 // do an update on the particle
 inline void Crystal::UpdateParticle ( const int i ) {
-    AnchorParticle( ivec3( int( 100.0f * uniformRNG() ), int( 100.0f * uniformRNG() ), int( 100.0f * uniformRNG() ) ), mat4( 1.0f ) );
+    // AnchorParticle( ivec3( int( 100.0f * uniformRNG() ), int( 100.0f * uniformRNG() ), int( 100.0f * uniformRNG() ) ), mat4( 1.0f ) );
+    int idx = i % simConfig.numParticlesScratch;
+    vec4 &particle = std::ref( particleScratch[ idx ]  );
+
+    // oob decrement + respawn logic
+    if ( glm::any( glm::lessThanEqual( particle.xyz(), vec3( minExtents - ivec3( 10 ) ) ) ) ||
+        glm::any( glm::greaterThanEqual( particle.xyz(), vec3( maxExtents + ivec3( 10 ) ) ) ) ) {
+        // idea is that when you stray outside of the bounding volume, you suffer some attrition...
+        particle.w--;
+        if ( particle.w < 0.0f ) {
+            // and eventually when you die, you respawn somewhere on the boundary
+            RespawnParticle( idx );
+        }
+    }
+
+    thread_local vec4 flowVector = vec4( simConfig.dynamicFlowInitialDirection, 0.0f );
+    flowVector = glm::rotate( identity, normalRNG(), glm::normalize( vec3( normalRNG(), normalRNG(), normalRNG() ) ) ) * flowVector;
+    particle += vec4( simConfig.temperature * vec3( normalRNG(), normalRNG(), normalRNG() ) + uniformRNG() * flowVector.xyz() * simConfig.dynamicFlowAmount + uniformRNG() * simConfig.staticFlowDirection * simConfig.staticFlowAmount, 0.0f );
+
+    // construct a list of nearby points...
+    vector< mat4 > nearbyPoints;
+
+    // looking at the local neighborhood...
+    const auto& s = { -1, 0, 1 };
+    for ( int x : s )
+    for ( int y : s )
+    for ( int z : s ) {
+        // if ( x == 0 && y == 0 && z == 0 ) continue;
+        const ivec3 loc = ivec3( particle.xyz() ) + ivec3( x, y, z );
+
+        // "find()" will also return the pointer to the container contents
+        if ( std::shared_ptr< GridCell > gcp; anchoredParticles.find( loc, gcp ) ) {
+            // we have located a cell which contains particles...
+            const size_t count = gcp->GetCount();
+
+            for ( int j = 0; j < count; j++ ) {
+                nearbyPoints.push_back( *gcp->Get( j ) );
+            }
+        } // else we did not find any contents here
+    }
+
+    // we need to find out which, if any, of these points can be anchored to...
+    if ( !nearbyPoints.empty() ) {
+        // finding the closest point... we know we have 1, so we start with that
+        mat4 closestPointTransform = nearbyPoints[ 0 ];
+        vec3 closestPointTransformed = ( closestPointTransform * p0 ).xyz();
+        float closestPointDistance = glm::distance(
+            particle.xyz(), closestPointTransformed
+        );
+
+        // if we have more than one point to consider, compare them
+        for ( auto& transform : nearbyPoints ) {
+            const vec3 p = ( transform * p0 ).xyz();
+            const float d = glm::distance( particle.xyz(), p );
+            if ( d < closestPointDistance ) {
+                closestPointDistance = d;
+                closestPointTransform = transform;
+                closestPointTransformed = p;
+            }
+        }
+
+        // some additional bonding criteria...?
+        if ( closestPointDistance < simConfig.bondThreshold ) {
+            // close enough... random hash... etc
+            // figure out which of bonding sites you want to bond to... probably the closest one of them
+            vec3 closestBondingPointOffset;
+            float closestBondingPointDistance = 10000.0f;
+
+            if ( uniformRNG() < simConfig.bondChanceToRandomize ) {
+                // just pick one at random...
+                closestBondingPointOffset = closestPointTransform * simConfig.bondingOffsets[ std::clamp( size_t( floor( uniformRNG() * simConfig.bondingOffsets.size() ) ), size_t( 0 ), simConfig.bondingOffsets.size() ) ];
+            } else {
+                for ( auto& bpo : simConfig.bondingOffsets ) {
+                    vec4 transformedBondingPointOffset = closestPointTransform * bpo;
+                    const float d = glm::distance( particle.xyz(), closestPointTransformed + transformedBondingPointOffset.xyz() );
+                    if ( d < closestBondingPointDistance ) {
+                        closestBondingPointDistance = d;
+                        closestBondingPointOffset = transformedBondingPointOffset.xyz();
+                    }
+                }
+            }
+
+            if ( uniformRNG() < simConfig.defectRate ) {
+                closestBondingPointOffset += simConfig.defectPositionJitter * vec3( normalRNG(), normalRNG(), normalRNG() );
+                closestPointTransform = glm::translate( glm::rotate( glm::translate( closestPointTransform, -closestPointTransformed ), simConfig.defectRotationJitter * normalRNG(), glm::normalize( vec3( normalRNG(), normalRNG(), normalRNG() ) ) ), closestPointTransformed );
+            }
+
+            const vec4 TvX = closestPointTransform * vX;
+            const vec4 TvY = closestPointTransform * vY;
+            const vec4 TvZ = closestPointTransform * vZ;
+
+            const vec3 p = closestPointTransformed + closestBondingPointOffset.xyz();
+            const mat4 pTransform = mat4( TvX, TvY, TvZ, vec4( p, 1.0f ) );
+
+            // mutex is locked, only during add... math happens outside, nice
+            AnchorParticle( ivec3( p ), pTransform );
+
+            // since we bound to a surface, the point location is no longer valid and should not proceed
+            RespawnParticle( idx );
+        }
+    }
 }
 //=================================================================================================
 // this is the master thread over the worker threads on the crystal object
