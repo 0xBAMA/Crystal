@@ -459,6 +459,7 @@ public:
     void LoadSpecifiedConfig ( const string& path );
     void GenerateRandomConfig ();
     void GenerateOffsets ( const string& templateSelect );
+    void Reinitialize ();
 
     // monitor thread function
     void MonitorThreadFunction ();
@@ -901,6 +902,33 @@ void Crystal::Animation ( string filename = "timestamp" ) {
 
     // once the thread is spawned, we don't need to touch it...
     t.detach(); // jthreads automatically rejoin on destruction
+}
+
+void Crystal::Reinitialize() {
+    particleStorageAllocator = simConfig.numParticlesStorage; // force pause
+    sleep_for( 100ms );
+
+    // do the reset
+    GenerateRandomConfig();
+    anchoredParticles.clear();
+    sleep_for( 100ms );
+
+    { // add initial seed particles to the hashmap
+        jobDispatch = 0;
+        particleStorageAllocator = 0;
+        for ( int i = 0; i < simConfig.numInitialSeedParticles; i++ ) {
+            // cout << "Adding particle " << i << endl;
+            // pick from the specified distribution
+            const vec3 p = glm::mix( vec3( simConfig.InitialSeedSpanMin ),
+                                     vec3( simConfig.InitialSeedSpanMax ),
+                                     vec3( uniformRNG(), uniformRNG(), uniformRNG() ) );
+
+            const vec3 axis = normalize( vec3( normalRNG(), normalRNG(), normalRNG() ) );
+            const mat4 transform = glm::rotate( glm::translate( glm::scale( identity, vec3( 2.0f ) ), p ), 10000.0f * uniformRNG(), axis );
+
+            AnchorParticle( ivec3( p ), transform );
+        }
+    }
 }
 
 void Crystal::Screenshot ( string filename = "timestamp" ) {

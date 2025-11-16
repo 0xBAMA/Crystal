@@ -100,12 +100,14 @@ Component GetUpdatedMenuComponent () {
                     Container::Horizontal({
                         Button( " Add ", [ &, iC ] () { std::jthread t( [ & ] () { crystals[ iC ] = make_unique< Crystal >(); } ); t.detach(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] == nullptr; }),
                         // pause/resume button would be nice...
+                        Button( " Reinit ", [ &, iC ] () { crystals[ iC ]->Reinitialize(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] != nullptr; }),
+                        Renderer( []() { return text( "    " ); } ),
                         Button( " Delete ", [ &, iC ] () { std::jthread t( [ & ] () { crystals[ iC ].reset(); } ); t.detach(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] != nullptr; } ),
-                        Renderer( []() { return text( "      " ); } ),
+                        Renderer( []() { return text( "    " ); } ),
                         Button( " Save ", [ &, iC ] () { crystals[ iC ]->Save(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] != nullptr; }),
-                        Renderer( []() { return text( "      " ); } ),
+                        Renderer( []() { return text( "    " ); } ),
                         Button( " Screenshot ", [ &, iC ] () { crystals[ iC ]->Screenshot(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] != nullptr; }),
-                        Renderer( []() { return text( "      " ); } ),
+                        Renderer( []() { return text( "    " ); } ),
                         Button( " Animation ", [ &, iC ] () { crystals[ iC ]->Animation(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] != nullptr; }),
                     }) | align_right,
                 }));
