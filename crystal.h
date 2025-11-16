@@ -553,10 +553,10 @@ inline void Crystal::DrawPixel ( const uint32_t x, const uint32_t y ) {
         if ( IntersectAABB( rO, rD, minExtentsIn, maxExtentsIn, tMin, tMax ) ) {
 
             // delta track raymarch
-            const vec3 p0 = rO + max( 0.0f, tMin ) * rD;
+            const vec3 p0c = rO + max( 0.0f, tMin ) * rD;
             for ( int s = 0; s < samples; s++ ) {
                 // vec3 p = p0 + vec3( normalRNG(), normalRNG(), 0.0f );
-                vec3 p = p0;
+                vec3 p = p0c;
                 for ( int i = 0; i < maxDistance; i++ ) {
                     float t = -log( uniformRNG() );
                     p += t * rD;
