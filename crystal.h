@@ -381,7 +381,7 @@ public:
     float GetPercentage();
 
     // some placeholder stuff, hooks for controls
-    void Screenshot();
+    void Screenshot( string filename );
     void Save();
     void Quit();
 
@@ -665,9 +665,20 @@ inline void Crystal::StampChar ( const uint8_t &c, ivec2 location, const ivec2 s
 inline void Crystal::SaveCurrentImage ( const string &filename ) const {
     stbi_write_png( filename.c_str(), imageWidth, imageHeight, 4, &imageBuffer[ 0 ], 4 * imageWidth );
 }
-void Crystal::Screenshot () {
+//=================================================================================================
+// External controls/public interface
+//=================================================================================================
+void Crystal::Screenshot ( string filename = "timestamp" ) {
     // spawn a thread to prepare the data, tbd
         // should do any prep work, clear the image, and then signal
+
+    if ( filename == string( "timestamp" ) ) {
+        auto now = std::chrono::system_clock::now();
+        auto inTime_t = std::chrono::system_clock::to_time_t( now );
+        std::stringstream ssA;
+        ssA << std::put_time( std::localtime( &inTime_t ), "Crystal-Screenshot-%Y-%m-%d at %H-%M-%S.png" );
+        filename = ssA.str();
+    }
 
     std::jthread t( [ & ] () {
         lock_guard< mutex > lock( ssMutex ); // don't want to try to be doing more than one of these at once...
