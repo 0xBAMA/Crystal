@@ -704,8 +704,8 @@ Crystal::Crystal ( const string yamlPath = "RANDOM" ) {
                 vec3( simConfig.InitialSeedSpanMax ),
                 vec3( uniformRNG(), uniformRNG(), uniformRNG() ) );
 
-            const vec3 axis = normalize( vec3( uniformRNG(), uniformRNG(), uniformRNG() ) );
-            const mat4 transform = glm::translate( glm::rotate( identity, 100.0f * normalRNG(), axis ), p );
+            const vec3 axis = normalize( vec3( normalRNG(), normalRNG(), normalRNG() ) );
+            const mat4 transform = glm::rotate( glm::translate( identity, p ), 10000.0f * uniformRNG(), axis );
 
             AnchorParticle( ivec3( p ), transform );
         }
@@ -738,6 +738,9 @@ void Crystal::Screenshot ( string filename = "timestamp" ) {
     // spawn a thread to prepare the data, tbd
         // should do any prep work, clear the image, and then signal
 
+    renderPrep = true;
+    renderPrepEstimatedCompletion = 0.0f;
+
     if ( filename == string( "timestamp" ) ) {
         auto now = std::chrono::system_clock::now();
         auto inTime_t = std::chrono::system_clock::to_time_t( now );
@@ -752,7 +755,68 @@ void Crystal::Screenshot ( string filename = "timestamp" ) {
         // clear to black
         ClearImage();
 
+        renderPrepEstimatedCompletion = 0.1f;
+
         // do any prep work for the image
+        // calculate a transform
+        renderConfig.transform = glm::rotate( identity, normalRNG() * 10.0f, normalize( vec3( normalRNG(), normalRNG(), normalRNG() ) ) );
+        
+        // precompute lightweight model
+        voxelModel.clear();
+        int maxCount = 0;
+        
+        renderConfig.minExtentComputed = ivec3( 1000 );
+        renderConfig.maxExtentComputed = ivec3( -1000 );
+        const int count = int( particleStorageAllocator );
+        const ivec3 minExtentsCache = minExtents;
+        const ivec3 maxExtentsCache = maxExtents;
+
+        const vec3 color1 = vec3( 0.6f );
+        const vec3 color2 = vec3( 0.1f );
+
+        for ( int i = 0; i < count; i++ ) {
+            shared_ptr< mat4 > ptr = particleStorage[ i ];
+            vec4 p = *ptr * p0;
+            ivec3 iP = ivec3( renderConfig.outputScalar * p.xyz() );
+
+            vec4 temp;
+            vec4 col = vec4( glm::mix( color1, color2, float( i ) / float( count ) ), 1.0f );
+            if ( voxelModel.find( iP, temp ) ) {
+                temp += col;
+            } else {
+                temp = col;
+            }
+
+            renderConfig.minExtentComputed = min( renderConfig.minExtentComputed, iP );
+            renderConfig.maxExtentComputed = max( renderConfig.maxExtentComputed, iP );
+            maxCount = max( int( temp.a ), maxCount );
+            voxelModel.insert( iP, temp );
+
+            if ( !( i % 10000 ) ) {
+                renderPrepEstimatedCompletion = 0.1f + 0.5f * ( float( i ) / float( count ) );
+            }
+        }
+
+        // normalizing...
+        for ( int x = renderConfig.minExtentComputed.x; x <= renderConfig.maxExtentComputed.x; x++ ) {
+            for ( int y = renderConfig.minExtentComputed.y; y <= renderConfig.maxExtentComputed.y; y++ ) {
+                for ( int z = renderConfig.minExtentComputed.z; z <= renderConfig.maxExtentComputed.z; z++ ) {
+                    vec4 temp;
+                    const ivec3 p = ivec3( x, y, z );
+                    if ( voxelModel.find( p, temp ) ) {
+                        temp.x = temp.x / temp.w; // averaged color
+                        temp.y = temp.y / temp.w;
+                        temp.z = temp.z / temp.w;
+                        temp.w = ( temp.w / maxCount ); // normalized density
+                        voxelModel.insert( p, temp );
+                    }
+                }
+            }
+            renderPrepEstimatedCompletion = 0.6f + 0.4f * ( 1.0f - float( x + renderConfig.minExtentComputed.x ) / ( renderConfig.minExtentComputed.x - renderConfig.maxExtentComputed.x ) );
+        }
+
+        renderPrep = false;
+        renderPrepEstimatedCompletion = 1.0f;
 
         // job system cuts over to render work
         ssComplete = 0;
