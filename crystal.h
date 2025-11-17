@@ -407,6 +407,9 @@ public:
     // used signal termination to the worker threads
     atomic< bool > threadKill = false;
     atomic< bool > pause = false;
+    atomic< bool > renderPrep = false;
+    atomic< float > renderPrepEstimatedCompletion = 0.0f;
+    atomic< bool > imageSaving = false;
 
     // job counter + screenshot trigger
     atomic_uintmax_t jobDispatch = 0;
@@ -482,6 +485,10 @@ inline string Crystal::GetStateString () {
     // options are "WORKING", "RENDERING", "FINISHED"
     if ( ssComplete < numPixels && ssDispatch < numPixels )
         return string( "RENDERING" );
+    else if ( renderPrep )
+        return string( "RENDER PREP" );
+    else if ( imageSaving )
+        return string( "IMAGE SAVING" );
     else if ( particleStorageAllocator < ( simConfig.numParticlesStorage - pad ) )
         return string( "WORKING" );
     else
@@ -494,6 +501,8 @@ inline float Crystal::GetPercentage () {
         return float( particleStorageAllocator ) / float( simConfig.numParticlesStorage );
     else if ( ss == "RENDERING" )
         return float( ssComplete ) / float( numPixels );
+    else if ( ss == "RENDER PREP" )
+        return renderPrepEstimatedCompletion;
     else // "FINISHED"
         return 1.0f;
 }
