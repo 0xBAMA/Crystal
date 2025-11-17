@@ -344,6 +344,16 @@ struct CrystalRenderConfig {
             // show number of steps into the volume - heatmaps
             // show glyph bounds
         // include labels or not
+
+    bool pixelShuffle = true;
+    vector< ivec2 > offsets;
+
+    float outputScalar = 4.0f;
+
+    ivec3 minExtentComputed;
+    ivec3 maxExtentComputed;
+
+    mat4 transform;
 };
 //=================================================================================================
 // global constants
