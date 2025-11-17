@@ -105,6 +105,8 @@ Component GetUpdatedMenuComponent () {
                         Button( " Save ", [ &, iC ] () { crystals[ iC ]->Save(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] != nullptr; }),
                         Renderer( []() { return text( "      " ); } ),
                         Button( " Screenshot ", [ &, iC ] () { crystals[ iC ]->Screenshot(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] != nullptr; }),
+                        Renderer( []() { return text( "      " ); } ),
+                        Button( " Animation ", [ &, iC ] () { crystals[ iC ]->Animation(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] != nullptr; }),
                     }) | align_right,
                 }));
             }
