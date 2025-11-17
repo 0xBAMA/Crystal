@@ -763,13 +763,17 @@ void Crystal::Screenshot ( string filename = "timestamp" ) {
             sleep_for( 1ms );
         }
 
-        const string s = string( "TEST 123 TEST" );
-        StampString( s, ivec2( 100, 200 ), ivec2( 1 ),  ivec4( 255, 189, 32, 255 ) );
-        StampString( s, ivec2( 100, 250 ), ivec2( 1, 2 ), ivec4( 255, 189, 32, 255 ) );
-        StampString( s, ivec2( 100, 300 ), ivec2( 2, 1 ), ivec4( 255, 189, 32, 255 ) );
 
+        StampString( string( "Count: " ) + to_string( count ), ivec2( 100, 500 ), ivec2( 1 ), ivec4( 255, 189, 32, 255 ) );
+        StampString( string( "Extents: " ), ivec2( 100, 510 ), ivec2( 1 ), ivec4( 255, 189, 32, 255 ) );
+        StampString( string( " x: " ) + frontPad( 5, to_string( minExtentsCache.x ) ) + " " + frontPad( 5, to_string( maxExtentsCache.x ) ), ivec2( 100, 520 ), ivec2( 1 ), ivec4( 255, 189, 32, 255 ) );
+        StampString( string( " y: " ) + frontPad( 5, to_string( minExtentsCache.y ) ) + " " + frontPad( 5, to_string( maxExtentsCache.y ) ), ivec2( 100, 530 ), ivec2( 1 ), ivec4( 255, 189, 32, 255 ) );
+        StampString( string( " z: " ) + frontPad( 5, to_string( minExtentsCache.z ) ) + " " + frontPad( 5, to_string( maxExtentsCache.z ) ), ivec2( 100, 540 ), ivec2( 1 ), ivec4( 255, 189, 32, 255 ) );
+
+        imageSaving = true;
         // save the image, now that it's done
         SaveCurrentImage( filename );
+        imageSaving = false;
     } );
 
     // once the thread is spawned, we don't need to touch it...
