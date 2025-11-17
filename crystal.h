@@ -852,15 +852,15 @@ inline void Crystal::GenerateRandomConfig () {
     out << YAML::Key << "numParticlesScratch";
     out << YAML::Value << simConfig.numParticlesScratch;
 
-    simConfig.numParticlesStorage = 400'000;
+    simConfig.numParticlesStorage = 50'000'000;
     out << YAML::Key << "numParticlesStorage";
     out << YAML::Value << simConfig.numParticlesStorage;
 
-    simConfig.numInitialSeedParticles = std::max( uint32_t( 200 * std::pow( uniformRNG(), 3.0f ) ), 1u );
+    simConfig.numInitialSeedParticles = std::max( uint32_t( 20.0f * uniformRNG() ), 1u );
     out << YAML::Key << "numInitialSeedParticles";
     out << YAML::Value << simConfig.numInitialSeedParticles;
 
-    simConfig.InitialSeedSpanMin = ivec3( -10 );
+    simConfig.InitialSeedSpanMin = ivec3( -100, -50, -10 );
     out << YAML::Key << "InitialSeedParticleSpanMinX";
     out << YAML::Value << simConfig.InitialSeedSpanMin.x;
     out << YAML::Key << "InitialSeedParticleSpanMinY";
@@ -868,7 +868,7 @@ inline void Crystal::GenerateRandomConfig () {
     out << YAML::Key << "InitialSeedParticleSpanMinZ";
     out << YAML::Value << simConfig.InitialSeedSpanMin.z;
 
-    simConfig.InitialSeedSpanMax = ivec3( 10 );
+    simConfig.InitialSeedSpanMax = ivec3( 100, 50, 10 );
     out << YAML::Key << "InitialSeedParticleSpanMaxX";
     out << YAML::Value << simConfig.InitialSeedSpanMax.x;
     out << YAML::Key << "InitialSeedParticleSpanMaxY";
@@ -886,7 +886,7 @@ inline void Crystal::GenerateRandomConfig () {
 
     // initialize spawn probabilities as uniformly random
     for ( auto& sp : simConfig.spawnProbabilities ) {
-        sp = 1.0f;
+        sp = 0.5f;
     }
     out << YAML::Key << "spawnProbabilityPositiveX";
     out << YAML::Value << simConfig.spawnProbabilities[ 0 ];
@@ -902,27 +902,27 @@ inline void Crystal::GenerateRandomConfig () {
     out << YAML::Value << simConfig.spawnProbabilities[ 5 ];
 
     // uniform spawn seems to create the best actual "crystal" behavior, so we will bias towards that
-    simConfig.spawnProbabilities[ 6 ] = 10.0f;
+    simConfig.spawnProbabilities[ 6 ] = 15.0f;
     out << YAML::Key << "spawnProbabilityUniformVolume";
     out << YAML::Value << simConfig.spawnProbabilities[ 6 ];
 
-    simConfig.temperature = 1.0f + 10.0f * uniformRNG();
+    simConfig.temperature = 10.0f + 10.0f * uniformRNG();
     out << YAML::Key << "temperature";
     out << YAML::Value << simConfig.temperature;
 
-    simConfig.defectRate = 0.0001f;
+    simConfig.defectRate = 0.001f * uniformRNG();
     out << YAML::Key << "defectRate";
     out << YAML::Value << simConfig.defectRate;
 
-    simConfig.defectPositionJitter = 1.0f;
+    simConfig.defectPositionJitter = 10.0f;
     out << YAML::Key << "defectPositionJitter";
     out << YAML::Value << simConfig.defectPositionJitter;
 
-    simConfig.defectRotationJitter = 1.0f;
+    simConfig.defectRotationJitter = 3.0f;
     out << YAML::Key << "defectRotationJitter";
     out << YAML::Value << simConfig.defectRotationJitter;
 
-    simConfig.bondChanceToRandomize = 0.1f;
+    simConfig.bondChanceToRandomize = 0.0f;
     out << YAML::Key << "bondChanceToRandomize";
     out << YAML::Value << simConfig.bondChanceToRandomize;
 
@@ -934,7 +934,7 @@ inline void Crystal::GenerateRandomConfig () {
     out << YAML::Key << "chanceToBond";
     out << YAML::Value << simConfig.chanceToBond;
 
-    simConfig.staticFlowAmount = uniformRNG();
+    simConfig.staticFlowAmount = 0.0f;
     out << YAML::Key << "staticFlowAmount";
     out << YAML::Value << simConfig.staticFlowAmount;
 
@@ -946,7 +946,7 @@ inline void Crystal::GenerateRandomConfig () {
     out << YAML::Key << "staticFlowDirectionZ";
     out << YAML::Value << simConfig.staticFlowDirection.z;
 
-    simConfig.dynamicFlowAmount = uniformRNG();
+    simConfig.dynamicFlowAmount = 0.01f;
     out << YAML::Key << "dynamicFlowAmount";
     out << YAML::Value << simConfig.dynamicFlowAmount;
 
