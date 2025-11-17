@@ -890,7 +890,17 @@ void Crystal::Shutdown () {
 //=================================================================================================
 void Crystal::Save () {
     // save out the model
-
+        // we have the values already now prepared as mat4's, we just need to get it from the pointers
+    vector< mat4 > data;
+    for ( int i = 0; i < particleStorageAllocator; i++ ) {
+        data.push_back( *particleStorage[ i ] );
+    }
+    // we'll just save it as an image...
+        // width is going to be a fixed batch of 4096, that's 1024 points per row...
+    int w = 4096;
+    int h = particleStorageAllocator / 1024;
+    data.resize( w * ( ( data.size() + w - 1 ) / w ) );
+    stbi_write_png( string( "crystalModelTest.png" ).c_str(), w, h, 4, &data[ 0 ], 4 * w );   
 }
 //=================================================================================================
 // particle support functions
