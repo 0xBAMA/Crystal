@@ -108,9 +108,9 @@ namespace std {
 	template<> struct hash< ivec3 > {
 		// custom specialization of std::hash can be injected in namespace std
 		std::size_t operator()( ivec3 const& s ) const noexcept {
-			std::size_t h1 = std::hash< int >{}( s.x );
-			std::size_t h2 = std::hash< int >{}( s.y );
-			std::size_t h3 = std::hash< int >{}( s.z );
+			std::size_t h1 = std::hash< int >{}( s.x + 512 );
+			std::size_t h2 = std::hash< int >{}( s.y + 512 );
+			std::size_t h3 = std::hash< int >{}( s.z + 512 );
 			return h1 ^ ( h2 << 10 ) ^ ( h3 << 20 );
 		}
 	};
