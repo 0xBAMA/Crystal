@@ -10,6 +10,10 @@ using std::endl;
 using std::string;
 using std::to_string;
 //=================================================================================================
+const inline string frontPad ( int width, string s ) {
+    return string( width - s.length(), ' ' ) + s;
+}
+//=================================================================================================
 // Terminal UI output
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/screen.hpp>

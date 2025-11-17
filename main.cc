@@ -73,15 +73,15 @@ Component GetUpdatedMenuComponent () {
                                 const float percentageComplete = crystals[ iC ]->GetPercentage();
                                 const string stateString = crystals[ iC ]->GetStateString();
                                 return vbox({
-                                    hbox({ text( to_string( iC ) + ": " + stateString + " " ), gauge( percentageComplete ), }),
-                                    flexbox({ text( "Min x: " + string( 5 - to_string( crystals[ iC ]->minExtents.x ).length(), ' ' ) + to_string( crystals[ iC ]->minExtents.x )
-                                                 + " y: " + string( 5 - to_string( crystals[ iC ]->minExtents.y ).length(), ' ' ) + to_string( crystals[ iC ]->minExtents.y )
-                                                 + " z: " + string( 5 - to_string( crystals[ iC ]->minExtents.z ).length(), ' ' ) + to_string( crystals[ iC ]->minExtents.z ) ),
-                                        text( "              Job Counter: " + string( 20 - to_string( crystals[ iC ]->jobDispatch ).length(), ' ' ) + to_string( crystals[ iC ]->jobDispatch ) ) | align_right } ),
-                                    flexbox({ text( "Max x: " + string( 5 - to_string( crystals[ iC ]->maxExtents.x ).length(), ' ' ) + to_string( crystals[ iC ]->maxExtents.x )
-                                                 + " y: " + string( 5 - to_string( crystals[ iC ]->maxExtents.y ).length(), ' ' ) + to_string( crystals[ iC ]->maxExtents.y )
-                                                 + " z: " + string( 5 - to_string( crystals[ iC ]->maxExtents.z ).length(), ' ' ) + to_string( crystals[ iC ]->maxExtents.z ) ),
-                                        text( "              Anchored:    " + string( 20 - to_string( crystals[ iC ]->particleStorageAllocator ).length(), ' ' ) + to_string( crystals[ iC ]->particleStorageAllocator ) ) | align_right } ),
+                                    hbox({ text( to_string( iC ) + ": " + stateString + ( ( stateString == "" ) ? ( " " ) : ( " [" + frontPad( 3, to_string( int( 100 * percentageComplete ) ) ) + "%]" ) ) ), gauge( percentageComplete ), }),
+                                    flexbox({ text( "Min x: " + frontPad( 5, to_string( crystals[ iC ]->minExtents.x ) )
+                                                 + " y: " + frontPad( 5, to_string( crystals[ iC ]->minExtents.y ) )
+                                                 + " z: " + frontPad( 5, to_string( crystals[ iC ]->minExtents.z ) ) ),
+                                        text( "              Job Counter: " + frontPad( 20, to_string( crystals[ iC ]->jobDispatch ) ) ) | align_right } ),
+                                    flexbox({ text( "Max x: " + frontPad( 5, to_string( crystals[ iC ]->maxExtents.x ) )
+                                                 + " y: " + frontPad( 5, to_string( crystals[ iC ]->maxExtents.y ) )
+                                                 + " z: " + frontPad( 5, to_string( crystals[ iC ]->maxExtents.z ) ) ),
+                                        text( "              Anchored:    " + frontPad( 20, to_string( crystals[ iC ]->particleStorageAllocator ) ) ) | align_right } ),
                                 });
                             // } else {
                                 // return vbox({
