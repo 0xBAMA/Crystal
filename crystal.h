@@ -771,6 +771,137 @@ Crystal::Crystal ( const string yamlPath = "RANDOM" ) {
     }
 }
 
+void Crystal::Animation ( string filename = "timestamp" ) {
+
+    renderPrep = true;
+    renderPrepEstimatedCompletion = 0.0f;
+
+    if ( filename == string( "timestamp" ) ) {
+        auto now = std::chrono::system_clock::now();
+        auto inTime_t = std::chrono::system_clock::to_time_t( now );
+        std::stringstream ssA;
+        ssA << std::put_time( std::localtime( &inTime_t ), "Crystal-Screenshot-%Y-%m-%d at %H-%M-%S.png" );
+        filename = ssA.str().c_str();
+    }
+
+    std::jthread t( [ &, filename ] () {
+        lock_guard< mutex > lock( ssMutex ); // don't want to try to be doing more than one of these at once...
+
+        // clear to black
+        ClearImage();
+
+        renderPrepEstimatedCompletion = 0.1f;
+
+        // do any prep work for the image
+        
+        // precompute lightweight model
+        voxelModel.clear();
+        int maxCount = 0;
+        
+        renderConfig.minExtentComputed = ivec3( 1000 );
+        renderConfig.maxExtentComputed = ivec3( -1000 );
+
+        const int count = int( particleStorageAllocator );
+        const ivec3 minExtentsCache = minExtents;
+        const ivec3 maxExtentsCache = maxExtents;
+        const vec3 midpoint = vec3( minExtentsCache + maxExtentsCache ) / 2.0f;
+
+        const vec3 color1 = vec3( 0.7f );
+        const vec3 color2 = vec3( 0.1f );
+
+        for ( int i = 0; i < count; i++ ) {
+            shared_ptr< mat4 > ptr = particleStorage[ i ];
+            vec4 p = *ptr * p0;
+            ivec3 iP = ivec3( renderConfig.outputScalar * ( p.xyz() - midpoint ) );
+
+            vec4 temp;
+            vec4 col = vec4( glm::mix( color1, color2, sqrt( float( i ) / float( count ) ) ), 1.0f );
+            if ( voxelModel.find( iP, temp ) ) {
+                temp += col;
+            } else {
+                temp = col;
+            }
+
+            renderConfig.minExtentComputed = min( renderConfig.minExtentComputed, iP );
+            renderConfig.maxExtentComputed = max( renderConfig.maxExtentComputed, iP );
+            maxCount = max( int( temp.a ), maxCount );
+            voxelModel.insert( iP, temp );
+
+            if ( !( i % 10000 ) ) {
+                renderPrepEstimatedCompletion = 0.1f + 0.5f * ( float( i ) / float( count ) );
+            }
+        }
+
+        // normalizing...
+        for ( int x = renderConfig.minExtentComputed.x; x <= renderConfig.maxExtentComputed.x; x++ ) {
+            for ( int y = renderConfig.minExtentComputed.y; y <= renderConfig.maxExtentComputed.y; y++ ) {
+                for ( int z = renderConfig.minExtentComputed.z; z <= renderConfig.maxExtentComputed.z; z++ ) {
+                    vec4 temp;
+                    const ivec3 p = ivec3( x, y, z );
+                    if ( voxelModel.find( p, temp ) ) {
+                        temp.x = temp.x / temp.w; // averaged color
+                        temp.y = temp.y / temp.w;
+                        temp.z = temp.z / temp.w;
+                        temp.w = ( temp.w / maxCount ); // normalized density
+                        voxelModel.insert( p, temp );
+                    }
+                }
+            }
+            renderPrepEstimatedCompletion = 0.6f + 0.4f * ( float( x - renderConfig.minExtentComputed.x ) / float( renderConfig.maxExtentComputed.x - renderConfig.minExtentComputed.x ) );
+        }
+
+        renderPrep = false;
+        renderPrepEstimatedCompletion = 1.0f;
+
+        for ( int i = 0; i < 4; i++ ) {
+            // create the GIF object
+            GifWriter g;
+        	auto now = std::chrono::system_clock::now();
+        	auto inTime_t = std::chrono::system_clock::to_time_t( now );
+        	std::stringstream ssA;
+        	ssA << std::put_time( std::localtime( &inTime_t ), "Crystal-%Y-%m-%d at %H-%M-%S.gif" );
+        	GifBegin( &g, ssA.str().c_str() , imageWidth, imageHeight, gifDelay );
+
+            // calculate a transform
+            renderConfig.transform = glm::rotate( identity, normalRNG() * 10.0f, normalize( vec3( normalRNG(), normalRNG(), normalRNG() ) ) );
+
+            vec3 axis = normalize( vec3( normalRNG(), normalRNG(), normalRNG() ) );
+
+            for ( int j = 0; j < 100; j++ ) {
+                renderConfig.transform = glm::rotate( renderConfig.transform, 0.01f, axis );
+
+                // job system cuts over to render work
+                ssComplete = 0;
+                ssDispatch = 0;
+
+                // wait for it
+                while ( ssComplete < numPixels ) {
+                    sleep_for( 1ms );
+                }
+
+                StampString( string( "Count: " ) + to_string( count ), ivec2( 100, 500 ), ivec2( 1 ), ivec4( 255, 189, 32, 255 ) );
+                StampString( string( "Extents: " ), ivec2( 100, 510 ), ivec2( 1 ), ivec4( 255, 189, 32, 255 ) );
+                StampString( string( " x: " ) + frontPad( 5, to_string( minExtentsCache.x ) ) + " " + frontPad( 5, to_string( maxExtentsCache.x ) ), ivec2( 100, 520 ), ivec2( 1 ), ivec4( 255, 189, 32, 255 ) );
+                StampString( string( " y: " ) + frontPad( 5, to_string( minExtentsCache.y ) ) + " " + frontPad( 5, to_string( maxExtentsCache.y ) ), ivec2( 100, 530 ), ivec2( 1 ), ivec4( 255, 189, 32, 255 ) );
+                StampString( string( " z: " ) + frontPad( 5, to_string( minExtentsCache.z ) ) + " " + frontPad( 5, to_string( maxExtentsCache.z ) ), ivec2( 100, 540 ), ivec2( 1 ), ivec4( 255, 189, 32, 255 ) );
+
+                imageSaving = true;
+                // save the image, now that it's done
+                GifWriteFrame( &g, &imageBuffer[ 0 ], imageWidth, imageHeight, gifDelay );
+
+                imageSaving = false;
+            }
+            // finish up
+            GifEnd( &g );
+        }
+
+
+    } );
+
+    // once the thread is spawned, we don't need to touch it...
+    t.detach(); // jthreads automatically rejoin on destruction
+}
+
 void Crystal::Screenshot ( string filename = "timestamp" ) {
     // spawn a thread to prepare the data, tbd
         // should do any prep work, clear the image, and then signal
