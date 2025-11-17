@@ -919,14 +919,14 @@ inline void Crystal::GenerateOffsets ( const string &templateSelect ) {
     // vector< vec3 > bondingOffsets;
 
 // for now, reusing the previous setup:
-    const float xXx = 0.1618f + 0.3f * uniformRNG();
+    const float xXx = 0.618f + 0.3f * uniformRNG();
     const float yYy = 0.618f + 0.1f * normalRNG();
     const float zZz = 0.618f;
 
     const float pi = 3.1415926535f;
-    const mat4 rX = glm::rotate( identity, 0.0f + uniformRNG(), normalize( vec3( 0.0f, 0.0f, 1.0f ) ) );
-    const mat4 rY = glm::rotate( identity, uniformRNG() * pi / 2.0f, normalize( vec3( 0.0f, 0.0f, 1.0f ) ) );
-    const mat4 rZ = glm::rotate( identity, pi / 5.0f, normalize( vec3( 1.0f, 0.0f, 0.0f ) ) );
+    const mat4 rX = glm::rotate( identity, normalRNG(), normalize( vec3( 0.0f, 0.0f, 1.0f ) ) );
+    const mat4 rY = glm::rotate( identity, uniformRNG() + pi / 4.0f, normalize( vec3( 0.0f, 0.0f, 1.0f ) ) );
+    const mat4 rZ = glm::rotate( identity, 0.0f, normalize( vec3( 1.0f, 0.0f, 0.0f ) ) );
 
     // note that 6 bonding points is in no way a constraint here
     simConfig.bondingOffsets = {
@@ -957,11 +957,11 @@ inline void Crystal::GenerateRandomConfig () {
     out << YAML::Key << "numParticlesScratch";
     out << YAML::Value << simConfig.numParticlesScratch;
 
-    simConfig.numParticlesStorage = 50'000'000;
+    simConfig.numParticlesStorage = 20'000'000;
     out << YAML::Key << "numParticlesStorage";
     out << YAML::Value << simConfig.numParticlesStorage;
 
-    simConfig.numInitialSeedParticles = std::max( uint32_t( 20.0f * uniformRNG() ), 1u );
+    simConfig.numInitialSeedParticles = uint32_t( 5.0f + 5000.0f * uniformRNG() * uniformRNG() * uniformRNG() );
     out << YAML::Key << "numInitialSeedParticles";
     out << YAML::Value << simConfig.numInitialSeedParticles;
 
@@ -1031,7 +1031,7 @@ inline void Crystal::GenerateRandomConfig () {
     out << YAML::Key << "bondChanceToRandomize";
     out << YAML::Value << simConfig.bondChanceToRandomize;
 
-    simConfig.bondThreshold = 0.75f;
+    simConfig.bondThreshold = 1.75f;
     out << YAML::Key << "bondThreshold";
     out << YAML::Value << simConfig.bondThreshold;
 
@@ -1039,7 +1039,7 @@ inline void Crystal::GenerateRandomConfig () {
     out << YAML::Key << "chanceToBond";
     out << YAML::Value << simConfig.chanceToBond;
 
-    simConfig.staticFlowAmount = 0.0f;
+    simConfig.staticFlowAmount = 0.1f;
     out << YAML::Key << "staticFlowAmount";
     out << YAML::Value << simConfig.staticFlowAmount;
 
