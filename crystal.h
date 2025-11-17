@@ -804,11 +804,13 @@ void Crystal::Screenshot ( string filename = "timestamp" ) {
         
         renderConfig.minExtentComputed = ivec3( 1000 );
         renderConfig.maxExtentComputed = ivec3( -1000 );
+
         const int count = int( particleStorageAllocator );
         const ivec3 minExtentsCache = minExtents;
         const ivec3 maxExtentsCache = maxExtents;
+        const vec3 midpoint = vec3( minExtentsCache + maxExtentsCache ) / 2.0f;
 
-        const vec3 color1 = vec3( 0.6f );
+        const vec3 color1 = vec3( 0.7f );
         const vec3 color2 = vec3( 0.1f );
 
         for ( int i = 0; i < count; i++ ) {
@@ -863,7 +865,6 @@ void Crystal::Screenshot ( string filename = "timestamp" ) {
         while ( ssComplete < numPixels ) {
             sleep_for( 1ms );
         }
-
 
         StampString( string( "Count: " ) + to_string( count ), ivec2( 100, 500 ), ivec2( 1 ), ivec4( 255, 189, 32, 255 ) );
         StampString( string( "Extents: " ), ivec2( 100, 510 ), ivec2( 1 ), ivec4( 255, 189, 32, 255 ) );
