@@ -814,10 +814,10 @@ void Crystal::Screenshot ( string filename = "timestamp" ) {
         for ( int i = 0; i < count; i++ ) {
             shared_ptr< mat4 > ptr = particleStorage[ i ];
             vec4 p = *ptr * p0;
-            ivec3 iP = ivec3( renderConfig.outputScalar * p.xyz() );
+            ivec3 iP = ivec3( renderConfig.outputScalar * ( p.xyz() - midpoint ) );
 
             vec4 temp;
-            vec4 col = vec4( glm::mix( color1, color2, float( i ) / float( count ) ), 1.0f );
+            vec4 col = vec4( glm::mix( color1, color2, sqrt( float( i ) / float( count ) ) ), 1.0f );
             if ( voxelModel.find( iP, temp ) ) {
                 temp += col;
             } else {
@@ -849,7 +849,7 @@ void Crystal::Screenshot ( string filename = "timestamp" ) {
                     }
                 }
             }
-            renderPrepEstimatedCompletion = 0.6f + 0.4f * ( 1.0f - float( x + renderConfig.minExtentComputed.x ) / ( renderConfig.minExtentComputed.x - renderConfig.maxExtentComputed.x ) );
+            renderPrepEstimatedCompletion = 0.6f + 0.4f * ( float( x - renderConfig.minExtentComputed.x ) / float( renderConfig.maxExtentComputed.x - renderConfig.minExtentComputed.x ) );
         }
 
         renderPrep = false;
