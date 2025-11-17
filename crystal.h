@@ -1005,6 +1005,7 @@ inline void Crystal::RespawnParticle ( const int i ) {
     // uniformly distributed within the sim volume
     vec3 p = glm::mix( minE, maxE, lerpValues );
 
+    /*
     switch ( pick ) {
     // flatten to one of the x faces
     case 0: p.x = minE.x; break;
@@ -1018,6 +1019,7 @@ inline void Crystal::RespawnParticle ( const int i ) {
     // uniform spawn - no change
     default: break;
     }
+    */
 
     particleScratch[ i ] = vec4( p, simConfig.particleAttitionHealth );
 }
