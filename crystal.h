@@ -442,6 +442,7 @@ public:
     vector< shared_ptr< mat4 > > particleStorage;               // preallocated memory buffer for particles, allows playback
     atomic_uintmax_t particleStorageAllocator;                  // bump allocator for above, enforces order
     HashMap< ivec3, shared_ptr< GridCell > > anchoredParticles; // concurrent hashmap of grid cell management pointers
+    HashMap< ivec3, vec4 > voxelModel;                          // lighter weight version of the grid for rendering
 
     // tracking sim parameters
     ivec3 minExtents = ivec3( 1000 );
@@ -526,11 +527,13 @@ inline void Crystal::DrawPixel ( const uint32_t x, const uint32_t y ) {
     const vec2 lowThresh = vec2( 0, 0.5f / ratio );
     const vec2 highThresh = vec2( 1, 1.0f - 0.5f / ratio );
 
-    const vec3 minExtentsIn = minExtents;
-    const vec3 maxExtentsIn = maxExtents ;
+    const vec3 minExtentsIn = renderConfig.minExtentComputed;
+    const vec3 maxExtentsIn = renderConfig.maxExtentComputed;
 
     vec3 color = vec3( 0.0f );
     int hits = 0;
+    constexpr int samples = 128;
+    
     shared_lock lock( imageMutex );
     if ( glm::all( glm::lessThan( uv, highThresh ) ) &&
         glm::all( glm::greaterThan( uv, lowThresh ) ) ) {
@@ -538,19 +541,20 @@ inline void Crystal::DrawPixel ( const uint32_t x, const uint32_t y ) {
 
         // ray setup
         vec2 uvAdjust = ( uv - vec2( 0.5f, 0.5f ) ) * vec2( 1.0f, float( imageHeight ) / float( imageWidth ) );
-        // mat4 inverseTransform = glm::inverse( transform );
-        vec3 rO = vec4( vec3( std::max( 200.0f, float( std::max( maxExtents.x - minExtents.x, std::max( maxExtents.y - minExtents.y, maxExtents.z - minExtents.z ) ) ) ) * uvAdjust, -200 ), 1.0f );
-        vec3 rD = vec4( 0.0f, 0.0f, 1.0f, 0.0f );
+        int maxDistance = int( std::ceil( glm::distance( vec3( minExtentsIn ), vec3( maxExtentsIn ) ) ) );
+        mat4 inverseTransform = glm::inverse( renderConfig.transform );
+        vec3 rO = inverseTransform * vec4( vec3( std::max( 300.0f, float( maxDistance * 2 ) ) * uvAdjust, -200 ), 1.0f );
+        vec3 rD = inverseTransform * vec4( 0.0f, 0.0f, 1.0f, 0.0f );
 
         // bounds intersection
-        int maxDistance = int( std::ceil( glm::distance( vec3( minExtents ), vec3( maxExtents ) ) ) );
         float tMin, tMax;
         if ( IntersectAABB( rO, rD, minExtentsIn, maxExtentsIn, tMin, tMax ) ) {
 
             // delta track raymarch
-            vec3 p = rO + max( 0.0f, tMin ) * rD;
-            constexpr int samples = 128;
+            const vec3 p0 = rO + max( 0.0f, tMin ) * rD;
             for ( int s = 0; s < samples; s++ ) {
+                // vec3 p = p0 + vec3( normalRNG(), normalRNG(), 0.0f );
+                vec3 p = p0;
                 for ( int i = 0; i < maxDistance; i++ ) {
                     float t = -log( uniformRNG() );
                     p += t * rD;
@@ -561,28 +565,61 @@ inline void Crystal::DrawPixel ( const uint32_t x, const uint32_t y ) {
                         break;
                     }
 
-                    shared_ptr< GridCell > temp;
-                    if ( anchoredParticles.find( ivec3( p ), temp ) ) {
-                        if ( ( temp->GetCount() / 128.0f ) > uniformRNG() ) { // this is the hit condition...
+                    vec4 temp;
+                    if ( voxelModel.find( ivec3( p ), temp ) ) {
+                        if ( ( temp.a ) > uniformRNG() ) { // this is the hit condition...
                             // do we hit something, going up?
                             vec3 pShadow = p;
-                            float shadowTerm = 1.0f;
+                            vec3 shadowTerm = vec3( 1.0f );
 
-                            // shadow ray trace
-                            for ( int j = 0; j < 50; j++ ) {
+                            const vec3 dir1 = normalize( p - vec3( mix( minExtents.xy(), maxExtents.xy(), vec2( uniformRNG() ) ), maxExtentsIn.z + 5.0f ) );
+                            // const vec3 dir2 = vY;
+                            // const vec3 dir3 = vZ;
+
+                            // shadow ray trace(s)
+                            for ( int j = 0; j < 200; j++ ) {
                             // light direction needs to go on renderconfig
-                                const vec3 lightDirection = vec3( 1.0f );
+                                const vec3 lightDirection = dir1;
                                 pShadow += lightDirection * float( -log( uniformRNG() ) );
-                                shared_ptr< GridCell > tempShadow;
-                                if ( anchoredParticles.find( ivec3( pShadow ), tempShadow ) ) {
-                                    if ( ( temp->GetCount() / 128.0f ) > uniformRNG() ) {
-                                        shadowTerm = 0.1f;
+                                vec4 tempShadow;
+                                if ( voxelModel.find( ivec3( pShadow ), tempShadow ) ) {
+                                    if ( ( temp.a ) > uniformRNG() ) {
+                                        shadowTerm.r = 0.1f;
+                                        break;
                                     }
                                 }
                             }
 
+                            /*
+                            pShadow = p;
+                            for ( int j = 0; j < 20; j++ ) {
+                            // light direction needs to go on renderconfig
+                                const vec3 lightDirection = dir2;
+                                pShadow += lightDirection * float( -log( uniformRNG() ) );
+                                vec4 tempShadow;
+                                if ( voxelModel.find( ivec3( pShadow ), tempShadow ) ) {
+                                    if ( ( temp.a ) > uniformRNG() ) {
+                                        shadowTerm.g = 0.1f;
+                                    }
+                                }
+                            }
+
+                            pShadow = p;
+                            for ( int j = 0; j < 20; j++ ) {
+                            // light direction needs to go on renderconfig
+                                const vec3 lightDirection = dir3;
+                                pShadow += lightDirection * float( -log( uniformRNG() ) );
+                                vec4 tempShadow;
+                                if ( voxelModel.find( ivec3( pShadow ), tempShadow ) ) {
+                                    if ( ( temp.a ) > uniformRNG() ) {
+                                        shadowTerm.b = 0.1f;
+                                    }
+                                }
+                            }
+                            */
+
                             //  color needs to go on renderconfig
-                            color += vec3( shadowTerm );
+                            color += temp.rgb() * vec3( shadowTerm.r );
                             // color += turbo( float( i ) / float( maxDistance ) );
                             hits++;
                             // break;
@@ -596,7 +633,7 @@ inline void Crystal::DrawPixel ( const uint32_t x, const uint32_t y ) {
         // I want to do the labels single threaded, not much sense making it
         // more complicated trying to evaluate a list of glyphs here
 
-    color /= float( hits );
+    color /= float( 1.2f * hits );
 
     // write the color to the image... this might move into the condition because we already overwrote with black opaque
     const uint32_t baseIdx = 4 * ( x + imageWidth * y );
