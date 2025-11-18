@@ -7,10 +7,10 @@
 atomic< bool > threadKill = false;
 
 // support stuff for the ui
-auto screen = ScreenInteractive::FixedSize( 120, 50 );
+auto screen = ScreenInteractive::FixedSize( 120, 60 );
 
 // list of crystals
-constexpr int numCrystalsMax = 10;
+constexpr int numCrystalsMax = 14;
 unique_ptr< Crystal > crystals[ numCrystalsMax ];
 
 int left_size = 36;
@@ -99,15 +99,18 @@ Component GetUpdatedMenuComponent () {
                     }),
                     Container::Horizontal({
                         Button( " Add ", [ &, iC ] () { std::jthread t( [ & ] () { crystals[ iC ] = make_unique< Crystal >(); } ); t.detach(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] == nullptr; }),
-                        // pause/resume button would be nice...
+
+                        Button( " Pause ", [ &, iC ] () { crystals[ iC ]->pause = true; }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ if ( crystals[ iC ] != nullptr ) return ( crystals[ iC ]->pause == false ); else return false; } ),
+                        Button( " Resume ", [ &, iC ] () { crystals[ iC ]->pause = false; }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ if ( crystals[ iC ] != nullptr ) return ( crystals[ iC ]->pause == true ); else return false; } ),
+                        Renderer( []() { return text( " | " ); } ),
                         Button( " Reinit ", [ &, iC ] () { crystals[ iC ]->Reinitialize(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] != nullptr; }),
-                        Renderer( []() { return text( "    " ); } ),
+                        Renderer( []() { return text( " | " ); } ),
                         Button( " Delete ", [ &, iC ] () { std::jthread t( [ & ] () { crystals[ iC ].reset(); } ); t.detach(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] != nullptr; } ),
-                        Renderer( []() { return text( "    " ); } ),
+                        Renderer( []() { return text( " | " ); } ),
                         Button( " Save ", [ &, iC ] () { crystals[ iC ]->Save(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] != nullptr; }),
-                        Renderer( []() { return text( "    " ); } ),
+                        Renderer( []() { return text( " | " ); } ),
                         Button( " Screenshot ", [ &, iC ] () { crystals[ iC ]->Screenshot(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] != nullptr; }),
-                        Renderer( []() { return text( "    " ); } ),
+                        Renderer( []() { return text( " | " ); } ),
                         Button( " Animation ", [ &, iC ] () { crystals[ iC ]->Animation(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] != nullptr; }),
                     }) | align_right,
                 }));

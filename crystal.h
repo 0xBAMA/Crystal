@@ -348,7 +348,7 @@ struct CrystalRenderConfig {
     bool pixelShuffle = true;
     vector< ivec2 > offsets;
 
-    float outputScalar = 4.0f;
+    float outputScalar = 2.8f;
 
     ivec3 minExtentComputed;
     ivec3 maxExtentComputed;
@@ -361,7 +361,7 @@ constexpr int gifDelay = 4;
 constexpr int imageWidth = 1280;
 constexpr int imageHeight = 720;
 constexpr int numPixels = imageWidth * imageHeight;
-constexpr int NUM_THREADS = 1;                     // threads of execution
+constexpr int NUM_THREADS = 72;                     // threads of execution
 constexpr int pad = 1000;                           // some extra particles as a safety buffer
 constexpr int GridCellMaxParticles = 128;           // this size might make sense to play with eventually
 //=================================================================================================
@@ -1128,7 +1128,7 @@ inline void Crystal::GenerateRandomConfig () {
     out << YAML::Key << "numParticlesScratch";
     out << YAML::Value << simConfig.numParticlesScratch;
 
-    simConfig.numParticlesStorage = 20'000'000;
+    simConfig.numParticlesStorage = 50'000'000;
     out << YAML::Key << "numParticlesStorage";
     out << YAML::Value << simConfig.numParticlesStorage;
 
@@ -1136,7 +1136,7 @@ inline void Crystal::GenerateRandomConfig () {
     out << YAML::Key << "numInitialSeedParticles";
     out << YAML::Value << simConfig.numInitialSeedParticles;
 
-    simConfig.InitialSeedSpanMin = ivec3( -100, -50, -10 );
+    simConfig.InitialSeedSpanMin = ivec3( -100 + 40 * uniformRNG(), -50 + 20 * uniformRNG(), -10 );
     out << YAML::Key << "InitialSeedParticleSpanMinX";
     out << YAML::Value << simConfig.InitialSeedSpanMin.x;
     out << YAML::Key << "InitialSeedParticleSpanMinY";
@@ -1144,7 +1144,7 @@ inline void Crystal::GenerateRandomConfig () {
     out << YAML::Key << "InitialSeedParticleSpanMinZ";
     out << YAML::Value << simConfig.InitialSeedSpanMin.z;
 
-    simConfig.InitialSeedSpanMax = ivec3( 100, 50, 10 );
+    simConfig.InitialSeedSpanMax = ivec3( 100 - 50 * uniformRNG(), 50 - 30 * uniformRNG(), 10 - 8 * uniformRNG() );
     out << YAML::Key << "InitialSeedParticleSpanMaxX";
     out << YAML::Value << simConfig.InitialSeedSpanMax.x;
     out << YAML::Key << "InitialSeedParticleSpanMaxY";
@@ -1182,7 +1182,7 @@ inline void Crystal::GenerateRandomConfig () {
     out << YAML::Key << "spawnProbabilityUniformVolume";
     out << YAML::Value << simConfig.spawnProbabilities[ 6 ];
 
-    simConfig.temperature = 10.0f + 10.0f * uniformRNG();
+    simConfig.temperature = 50.0f + 10.0f * uniformRNG();
     out << YAML::Key << "temperature";
     out << YAML::Value << simConfig.temperature;
 
@@ -1458,7 +1458,7 @@ inline void Crystal::WorkerThreadFunction ( int id ) {
         uintmax_t i;
         const bool work = ParticleUpdateIndicated( i );
 
-        if ( !ss && !work ) {
+        if ( ( !ss && !work ) || pause ) {
             // there is no work to do right now
             sleep_for( 1ms );
         } else if ( ss ) {
