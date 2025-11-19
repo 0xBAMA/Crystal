@@ -1057,11 +1057,13 @@ void Crystal::Save () {
         data.push_back( *particleStorage[ i ] );
     }
     // we'll just save it as an image...
-        // width is going to be a fixed batch of 4096, that's 1024 points per row...
-    int w = 4096;
-    int h = particleStorageAllocator / 1024;
-    data.resize( w * ( ( data.size() + w - 1 ) / w ) );
-    stbi_write_png( string( "crystalModelTest.png" ).c_str(), w, h, 4, &data[ 0 ], 4 * w );   
+        // width is going to be a fixed batch of 4096, that's 256 points per row...
+        // I want to keep mat4's for orientation, so that's 4x4 floats, 4 bytes per... that's 1 pixel per float, and 16 pixels per...
+            // width of 4096*4 means we can fit 256*4 particles per row
+    int w = 4096*4;
+    int h = particleStorageAllocator / ( 256 * 4 );
+    data.resize( data.size() + 3 * w ); // some padding
+    stbi_write_png( string( "crystalModelTest.png" ).c_str(), w, h, 4, &data[ 0 ], 4 * w );
 }
 //=================================================================================================
 // particle support functions
@@ -1182,11 +1184,11 @@ inline void Crystal::GenerateRandomConfig () {
     out << YAML::Key << "spawnProbabilityUniformVolume";
     out << YAML::Value << simConfig.spawnProbabilities[ 6 ];
 
-    simConfig.temperature = 50.0f + 10.0f * uniformRNG();
+    simConfig.temperature = 30.0f + 10.0f * normalRNG();
     out << YAML::Key << "temperature";
     out << YAML::Value << simConfig.temperature;
 
-    simConfig.defectRate = 0.001f * uniformRNG();
+    simConfig.defectRate = 0.01f * uniformRNG();
     out << YAML::Key << "defectRate";
     out << YAML::Value << simConfig.defectRate;
 
