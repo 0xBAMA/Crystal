@@ -1138,19 +1138,24 @@ inline void Crystal::GenerateRandomConfig () {
     GenerateOffsets( "RANDOM" );
     // todo: add to the config YAML
 
-    simConfig.numParticlesScratch = 1000;
+    simConfig.numParticlesScratch = 10000;
     out << YAML::Key << "numParticlesScratch";
     out << YAML::Value << simConfig.numParticlesScratch;
 
-    simConfig.numParticlesStorage = 50'000'000;
+    simConfig.numParticlesStorage = 15'000'000;
     out << YAML::Key << "numParticlesStorage";
     out << YAML::Value << simConfig.numParticlesStorage;
 
-    simConfig.numInitialSeedParticles = uint32_t( 5.0f + 5000.0f * uniformRNG() * uniformRNG() * uniformRNG() );
+    // if ( uniformRNG() < 0.5f )
+        // simConfig.numInitialSeedParticles = uint32_t( 1.0f + 50.0f * uniformRNG() * uniformRNG() * uniformRNG() );
+    // else
+        // simConfig.numInitialSeedParticles = uint32_t( 1.0f + 5000.0f * uniformRNG() );
+    simConfig.numInitialSeedParticles = 2000;
+
     out << YAML::Key << "numInitialSeedParticles";
     out << YAML::Value << simConfig.numInitialSeedParticles;
 
-    simConfig.InitialSeedSpanMin = ivec3( -100 + 40 * uniformRNG(), -50 + 20 * uniformRNG(), -10 );
+    simConfig.InitialSeedSpanMin = ivec3( -10.0f * uniformRNG() );
     out << YAML::Key << "InitialSeedParticleSpanMinX";
     out << YAML::Value << simConfig.InitialSeedSpanMin.x;
     out << YAML::Key << "InitialSeedParticleSpanMinY";
@@ -1158,7 +1163,7 @@ inline void Crystal::GenerateRandomConfig () {
     out << YAML::Key << "InitialSeedParticleSpanMinZ";
     out << YAML::Value << simConfig.InitialSeedSpanMin.z;
 
-    simConfig.InitialSeedSpanMax = ivec3( 100 - 50 * uniformRNG(), 50 - 30 * uniformRNG(), 10 - 8 * uniformRNG() );
+    simConfig.InitialSeedSpanMax = ivec3( 8.0f * uniformRNG() );
     out << YAML::Key << "InitialSeedParticleSpanMaxX";
     out << YAML::Value << simConfig.InitialSeedSpanMax.x;
     out << YAML::Key << "InitialSeedParticleSpanMaxY";
@@ -1176,7 +1181,7 @@ inline void Crystal::GenerateRandomConfig () {
 
     // initialize spawn probabilities as uniformly random
     for ( auto& sp : simConfig.spawnProbabilities ) {
-        sp = 0.5f;
+        sp = ( uniformRNG() < 0.5f ) ? ( 0.1f ) : ( uniformRNG() * 5.0f );
     }
     out << YAML::Key << "spawnProbabilityPositiveX";
     out << YAML::Value << simConfig.spawnProbabilities[ 0 ];
@@ -1192,15 +1197,15 @@ inline void Crystal::GenerateRandomConfig () {
     out << YAML::Value << simConfig.spawnProbabilities[ 5 ];
 
     // uniform spawn seems to create the best actual "crystal" behavior, so we will bias towards that
-    simConfig.spawnProbabilities[ 6 ] = 15.0f;
+    simConfig.spawnProbabilities[ 6 ] = 0.1f;
     out << YAML::Key << "spawnProbabilityUniformVolume";
     out << YAML::Value << simConfig.spawnProbabilities[ 6 ];
 
-    simConfig.temperature = 30.0f + 10.0f * normalRNG();
+    simConfig.temperature = 10.0f + 10.0f * uniformRNG();
     out << YAML::Key << "temperature";
     out << YAML::Value << simConfig.temperature;
 
-    simConfig.defectRate = 0.01f * uniformRNG();
+    simConfig.defectRate = 0.001f * uniformRNG();
     out << YAML::Key << "defectRate";
     out << YAML::Value << simConfig.defectRate;
 
@@ -1208,11 +1213,11 @@ inline void Crystal::GenerateRandomConfig () {
     out << YAML::Key << "defectPositionJitter";
     out << YAML::Value << simConfig.defectPositionJitter;
 
-    simConfig.defectRotationJitter = 3.0f;
+    simConfig.defectRotationJitter = 20.0f;
     out << YAML::Key << "defectRotationJitter";
     out << YAML::Value << simConfig.defectRotationJitter;
 
-    simConfig.bondChanceToRandomize = 0.0f;
+    simConfig.bondChanceToRandomize = 0.1f;
     out << YAML::Key << "bondChanceToRandomize";
     out << YAML::Value << simConfig.bondChanceToRandomize;
 
@@ -1224,7 +1229,7 @@ inline void Crystal::GenerateRandomConfig () {
     out << YAML::Key << "chanceToBond";
     out << YAML::Value << simConfig.chanceToBond;
 
-    simConfig.staticFlowAmount = 0.1f;
+    simConfig.staticFlowAmount = 0.0f;
     out << YAML::Key << "staticFlowAmount";
     out << YAML::Value << simConfig.staticFlowAmount;
 
@@ -1236,7 +1241,7 @@ inline void Crystal::GenerateRandomConfig () {
     out << YAML::Key << "staticFlowDirectionZ";
     out << YAML::Value << simConfig.staticFlowDirection.z;
 
-    simConfig.dynamicFlowAmount = 0.01f;
+    simConfig.dynamicFlowAmount = 0.0f;
     out << YAML::Key << "dynamicFlowAmount";
     out << YAML::Value << simConfig.dynamicFlowAmount;
 
@@ -1331,9 +1336,10 @@ inline void Crystal::UpdateParticle ( const int i ) {
         }
     }
 
-    thread_local vec4 flowVector = vec4( simConfig.dynamicFlowInitialDirection, 0.0f );
-    flowVector = glm::rotate( identity, normalRNG(), glm::normalize( vec3( normalRNG(), normalRNG(), normalRNG() ) ) ) * flowVector;
-    particle += vec4( simConfig.temperature * vec3( normalRNG(), normalRNG(), normalRNG() ) + uniformRNG() * flowVector.xyz() * simConfig.dynamicFlowAmount + uniformRNG() * simConfig.staticFlowDirection * simConfig.staticFlowAmount, 0.0f );
+    // thread_local vec4 flowVector = vec4( simConfig.dynamicFlowInitialDirection, 0.0f );
+    // flowVector = glm::rotate( identity, normalRNG(), glm::normalize( vec3( normalRNG(), normalRNG(), normalRNG() ) ) ) * flowVector;
+    // particle += vec4( simConfig.temperature * vec3( normalRNG(), normalRNG(), normalRNG() ) + uniformRNG() * flowVector.xyz() * simConfig.dynamicFlowAmount + uniformRNG() * simConfig.staticFlowDirection * simConfig.staticFlowAmount, 0.0f );
+    particle += vec4( simConfig.temperature * vec3( normalRNG(), normalRNG(), normalRNG() );
 
     // construct a list of nearby points...
     vector< mat4 > nearbyPoints;
