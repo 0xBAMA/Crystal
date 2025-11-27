@@ -7,11 +7,13 @@
 atomic< bool > threadKill = false;
 
 // support stuff for the ui
-auto screen = ScreenInteractive::FixedSize( 120, 60 );
+auto screen = ScreenInteractive::FixedSize( 120, 35 );
 
 // list of crystals
-constexpr int numCrystalsMax = 14;
+constexpr int numCrystalsMax = 5;
 unique_ptr< Crystal > crystals[ numCrystalsMax ];
+
+bool crystalModelsSaved[ numCrystalsMax ] = { false };
 
 int left_size = 36;
 std::chrono::time_point< std::chrono::system_clock > tStart;
