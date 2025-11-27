@@ -23,7 +23,7 @@ Component GetUpdatedMenuComponent () {
                  for ( int j = 0; j < 6; j++ ) {
                      for ( int i = 0; i < 12; i++ ) {
                          int idx = i + 6 * j;
-                         float intensity = usagePercentage[ idx ];
+                         float intensity = ( idx < usagePercentage.size() ) ? usagePercentage[ idx ] : 0.0f;
                          temp.push_back( text( " " ) | bgcolor( Color::RGB( 255 * std::sqrt( intensity ), 128 * intensity, 0 ) ) );
                      }
                      accum.push_back( hbox( temp ) );
