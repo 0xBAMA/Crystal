@@ -362,7 +362,7 @@ constexpr int imageWidth = 1280;
 constexpr int imageHeight = 720;
 constexpr int numPixels = imageWidth * imageHeight;
 constexpr int NUM_THREADS = 72;                     // threads of execution
-constexpr int pad = 1000;                           // some extra particles as a safety buffer
+constexpr int pad = 500;                             // some extra particles as a safety buffer
 constexpr int GridCellMaxParticles = 128;           // this size might make sense to play with eventually
 //=================================================================================================
 struct GridCell {
