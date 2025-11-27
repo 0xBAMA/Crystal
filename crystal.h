@@ -1464,26 +1464,30 @@ inline void Crystal::WorkerThreadFunction ( int id ) {
         allocator to see if we are "close" to the maximum, we need to enter a waiting state...
         */
 
-        // do we want screenshot work? if so, where?
-        uint32_t x, y;
-        const bool ss = ScreenshotIndicated( x, y );
+        if ( !pause ) {
+            // do we want screenshot work? if so, where?
+            uint32_t x, y;
+            const bool ss = ScreenshotIndicated( x, y );
 
-        // otherwise let's do particle work
-        uintmax_t i;
-        const bool work = ParticleUpdateIndicated( i );
+            // otherwise let's do particle work
+            uintmax_t i;
+            const bool work = ParticleUpdateIndicated( i );
 
-        if ( ( !ss && !work ) || pause ) {
-            // there is no work to do right now
-            sleep_for( 1ms );
-        } else if ( ss ) {
-        // if ( ss ) {
-            // we have secured work for one pixel
-            DrawPixel( x, y );
-            ++ssComplete; // helps with reporting "percentage complete"
-        } else if ( work ) {
-        // } else {
-            // we need to do work for one particle update, index indicated by the job counter i
-            UpdateParticle( i % simConfig.numParticlesScratch );
+            if ( !ss && !work ) {
+                // there is no work to do right now
+                sleep_for( 1ms );
+            } else if ( ss ) {
+            // if ( ss ) {
+                // we have secured work for one pixel
+                DrawPixel( x, y );
+                ++ssComplete; // helps with reporting "percentage complete"
+            } else if ( work ) {
+            // } else {
+                // we need to do work for one particle update, index indicated by the job counter i
+                UpdateParticle( i % simConfig.numParticlesScratch );
+            }
+        } else {
+            sleep_for( 10ms );
         }
     }
 }
