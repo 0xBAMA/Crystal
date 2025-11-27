@@ -911,6 +911,8 @@ void Crystal::Reinitialize() {
     sleep_for( 100ms );
 
     // do the reset
+    minExtents = ivec3( 0 );
+    maxExtents = ivec3( 0 );
     GenerateRandomConfig();
     anchoredParticles.clear();
     sleep_for( 100ms );
@@ -1065,7 +1067,13 @@ void Crystal::Save () {
     int w = 4096*4;
     int h = particleStorageAllocator / ( 256 * 4 );
     data.resize( data.size() + 3 * w ); // some padding
-    stbi_write_png( string( "crystalModelTest.png" ).c_str(), w, h, 4, &data[ 0 ], 4 * w );
+
+    auto now = std::chrono::system_clock::now();
+    auto inTime_t = std::chrono::system_clock::to_time_t( now );
+    std::stringstream ssA;
+    ssA << std::put_time( std::localtime( &inTime_t ), "Crystal-Model-%Y-%m-%d at %H-%M-%S.png" );
+
+    stbi_write_png( ssA.str().c_str(), w, h, 4, &data[ 0 ], 4 * w );
 }
 //=================================================================================================
 // particle support functions
