@@ -163,6 +163,15 @@ int main ( int argc, char** argv ) {
             screen.RequestAnimationFrame();
             loop.RunOnce();
             sleep_for( 100ms );
+
+            for ( int i = 0; i < numCrystalsMax; i++ ) {
+                if ( crystals[ i ] == nullptr ) continue;
+                if ( crystalModelsSaved[ i ] == false && crystals[ i ]->GetStateString() == string( "FINISHED" ) ) {
+                    crystalModelsSaved[ i ] = true;
+                    std::jthread t( [ &, i ] () { crystals[ i ]->pause = true; crystals[ i ]->Save(); crystals[ i ]->pause = false; } );
+                    t.detach();
+                }
+            }
         }
 
         // cout << "Running Monitor Thread " << std::chrono::duration_cast< std::chrono::milliseconds >( high_resolution_clock::now() - tStart )  << "ms" << endl;
