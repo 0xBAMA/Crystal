@@ -105,7 +105,7 @@ Component GetUpdatedMenuComponent () {
                         Button( " Pause ", [ &, iC ] () { crystals[ iC ]->pause = true; }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ if ( crystals[ iC ] != nullptr ) return ( crystals[ iC ]->pause == false ); else return false; } ),
                         Button( " Resume ", [ &, iC ] () { crystals[ iC ]->pause = false; }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ if ( crystals[ iC ] != nullptr ) return ( crystals[ iC ]->pause == true ); else return false; } ),
                         Renderer( []() { return text( " | " ); } ),
-                        Button( " Reinit ", [ &, iC ] () { std::jthread t( [ & ] () { crystals[ iC ]->Reinitialize(); } ); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] != nullptr; }),
+                        Button( " Reinit ", [ &, iC ] () { std::jthread t( [ & ] () { crystals[ iC ]->Reinitialize(); } ); crystalModelsSaved[ iC ] = false; }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] != nullptr; }),
                         Renderer( []() { return text( " | " ); } ),
                         Button( " Delete ", [ &, iC ] () { std::jthread t( [ & ] () { crystals[ iC ].reset(); } ); t.detach(); }, ButtonOption::Ascii() ) | Maybe( [ &, iC ]{ return crystals[ iC ] != nullptr; } ),
                         Renderer( []() { return text( " | " ); } ),
