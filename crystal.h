@@ -1102,14 +1102,16 @@ inline void Crystal::GenerateOffsets ( const string &templateSelect ) {
     // vector< vec3 > bondingOffsets;
 
 // for now, reusing the previous setup:
-    const float xXx = 0.618f + 0.3f * uniformRNG();
-    const float yYy = 0.618f + 0.1f * normalRNG();
-    const float zZz = 0.618f;
+    static rng gen( 0.5f, 1.5f );
+    const float xXx = gen();
+    const float yYy = gen();
+    const float zZz = gen();
 
     const float pi = 3.1415926535f;
-    const mat4 rX = glm::rotate( identity, normalRNG(), normalize( vec3( 0.0f, 0.0f, 1.0f ) ) );
-    const mat4 rY = glm::rotate( identity, uniformRNG() + pi / 4.0f, normalize( vec3( 0.0f, 0.0f, 1.0f ) ) );
-    const mat4 rZ = glm::rotate( identity, 0.0f, normalize( vec3( 1.0f, 0.0f, 0.0f ) ) );
+    static rngN gen2( 0.0f, 0.1f );
+    const mat4 rX = glm::rotate( identity, ( uniformRNG() < 0.245f ) ? ( 0.0f ) : ( gen2() ), normalize( vec3( 0.0f, 0.0f, 1.0f ) ) );
+    const mat4 rY = glm::rotate( identity, ( uniformRNG() < 0.800f ) ? ( 0.0f ) : ( gen2() ), normalize( vec3( 0.0f, 0.0f, 1.0f ) ) );
+    const mat4 rZ = glm::rotate( identity, ( uniformRNG() < 0.125f ) ? ( 0.0f ) : ( gen2() ), normalize( vec3( 1.0f, 0.0f, 0.0f ) ) );
 
     // note that 6 bonding points is in no way a constraint here
     simConfig.bondingOffsets = {
