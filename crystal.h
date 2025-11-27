@@ -492,6 +492,8 @@ inline string Crystal::GetStateString () {
         return string( "RENDER PREP" );
     else if ( imageSaving )
         return string( "IMAGE SAVING" );
+    else if ( pause )
+        return string( "PAUSED" );
     else if ( particleStorageAllocator < ( simConfig.numParticlesStorage - pad ) )
         return string( "WORKING" );
     else
@@ -500,7 +502,7 @@ inline string Crystal::GetStateString () {
 
 inline float Crystal::GetPercentage () {
     string ss = GetStateString(); 
-    if ( ss == "WORKING" )
+    if ( ss == "WORKING" || ss == "PAUSED" )
         return float( particleStorageAllocator ) / float( simConfig.numParticlesStorage );
     else if ( ss == "RENDERING" )
         return float( ssComplete ) / float( numPixels );
